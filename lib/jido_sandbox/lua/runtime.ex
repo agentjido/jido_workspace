@@ -1,4 +1,4 @@
-defmodule JidoSandbox.Lua.Runtime do
+defmodule Jido.Sandbox.Lua.Runtime do
   @moduledoc """
   Sandboxed Lua runtime with VFS bindings.
 
@@ -7,8 +7,8 @@ defmodule JidoSandbox.Lua.Runtime do
   - Dangerous globals are removed (os, io, package, require, debug, etc.)
   """
 
-  alias JidoSandbox.Lua.VfsApi
-  alias JidoSandbox.VFS.InMemory
+  alias Jido.Sandbox.Lua.VfsApi
+  alias Jido.Sandbox.VFS.InMemory
 
   @vfs_key [:_G, :__vfs__]
 

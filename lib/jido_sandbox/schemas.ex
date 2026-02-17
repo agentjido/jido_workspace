@@ -1,4 +1,4 @@
-defmodule JidoSandbox.Schemas do
+defmodule Jido.Sandbox.Schemas do
   @moduledoc """
   Zoi schemas for validating LLM tool inputs.
 
@@ -98,10 +98,10 @@ defmodule JidoSandbox.Schemas do
 
   ## Examples
 
-      iex> JidoSandbox.Schemas.validate_path("/foo/bar")
+      iex> Jido.Sandbox.Schemas.validate_path("/foo/bar")
       {:ok, "/foo/bar"}
 
-      iex> JidoSandbox.Schemas.validate_path("relative")
+      iex> Jido.Sandbox.Schemas.validate_path("relative")
       {:error, _}
 
   """

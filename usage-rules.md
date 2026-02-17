@@ -1,4 +1,4 @@
-# Jido Sandbox Usage Rules
+# Jido.Sandbox Usage Rules
 
 ## For LLM Tool Builders
 

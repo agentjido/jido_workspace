@@ -1,4 +1,4 @@
-defmodule JidoSandbox.VFS.InMemory do
+defmodule Jido.Sandbox.VFS.InMemory do
   @moduledoc """
   In-memory VFS implementation.
 
@@ -6,9 +6,9 @@ defmodule JidoSandbox.VFS.InMemory do
   Directories are tracked explicitly in a MapSet.
   """
 
-  @behaviour JidoSandbox.VFS
+  @behaviour Jido.Sandbox.VFS
 
-  alias JidoSandbox.VFS.Path, as: VPath
+  alias Jido.Sandbox.VFS.Path, as: VPath
 
   @type t :: %__MODULE__{
           files: %{String.t() => binary()},

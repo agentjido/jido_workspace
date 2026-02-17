@@ -1,4 +1,4 @@
-defmodule JidoSandbox.VFS.Path do
+defmodule Jido.Sandbox.VFS.Path do
   @moduledoc """
   Path normalization and validation for the VFS.
 
@@ -15,16 +15,16 @@ defmodule JidoSandbox.VFS.Path do
 
   ## Examples
 
-      iex> JidoSandbox.VFS.Path.normalize("/foo/bar")
+      iex> Jido.Sandbox.VFS.Path.normalize("/foo/bar")
       {:ok, "/foo/bar"}
 
-      iex> JidoSandbox.VFS.Path.normalize("/foo//bar")
+      iex> Jido.Sandbox.VFS.Path.normalize("/foo//bar")
       {:ok, "/foo/bar"}
 
-      iex> JidoSandbox.VFS.Path.normalize("relative/path")
+      iex> Jido.Sandbox.VFS.Path.normalize("relative/path")
       {:error, :path_must_be_absolute}
 
-      iex> JidoSandbox.VFS.Path.normalize("/foo/../bar")
+      iex> Jido.Sandbox.VFS.Path.normalize("/foo/../bar")
       {:error, :path_traversal_not_allowed}
 
   """
@@ -60,13 +60,13 @@ defmodule JidoSandbox.VFS.Path do
 
   ## Examples
 
-      iex> JidoSandbox.VFS.Path.parent("/foo/bar/baz.txt")
+      iex> Jido.Sandbox.VFS.Path.parent("/foo/bar/baz.txt")
       "/foo/bar"
 
-      iex> JidoSandbox.VFS.Path.parent("/foo")
+      iex> Jido.Sandbox.VFS.Path.parent("/foo")
       "/"
 
-      iex> JidoSandbox.VFS.Path.parent("/")
+      iex> Jido.Sandbox.VFS.Path.parent("/")
       "/"
 
   """
@@ -89,13 +89,13 @@ defmodule JidoSandbox.VFS.Path do
 
   ## Examples
 
-      iex> JidoSandbox.VFS.Path.basename("/foo/bar/baz.txt")
+      iex> Jido.Sandbox.VFS.Path.basename("/foo/bar/baz.txt")
       "baz.txt"
 
-      iex> JidoSandbox.VFS.Path.basename("/foo")
+      iex> Jido.Sandbox.VFS.Path.basename("/foo")
       "foo"
 
-      iex> JidoSandbox.VFS.Path.basename("/")
+      iex> Jido.Sandbox.VFS.Path.basename("/")
       ""
 
   """
@@ -113,13 +113,13 @@ defmodule JidoSandbox.VFS.Path do
 
   ## Examples
 
-      iex> JidoSandbox.VFS.Path.direct_child?("/foo/bar.txt", "/foo")
+      iex> Jido.Sandbox.VFS.Path.direct_child?("/foo/bar.txt", "/foo")
       true
 
-      iex> JidoSandbox.VFS.Path.direct_child?("/foo/bar/baz.txt", "/foo")
+      iex> Jido.Sandbox.VFS.Path.direct_child?("/foo/bar/baz.txt", "/foo")
       false
 
-      iex> JidoSandbox.VFS.Path.direct_child?("/foo", "/")
+      iex> Jido.Sandbox.VFS.Path.direct_child?("/foo", "/")
       true
 
   """

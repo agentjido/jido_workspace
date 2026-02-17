@@ -1,4 +1,4 @@
-defmodule JidoSandbox.VFS do
+defmodule Jido.Sandbox.VFS do
   @moduledoc """
   Behavior for Virtual Filesystem implementations.
 

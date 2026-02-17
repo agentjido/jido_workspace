@@ -1,4 +1,4 @@
-# Jido Sandbox
+# Jido.Sandbox
 
 [![Hex.pm](https://img.shields.io/hexpm/v/jido_sandbox.svg)](https://hex.pm/packages/jido_sandbox)
 [![Documentation](https://img.shields.io/badge/docs-hexpm-blue.svg)](https://hexdocs.pm/jido_sandbox)
@@ -21,29 +21,29 @@ end
 
 ```elixir
 # Create a new sandbox
-sandbox = JidoSandbox.new()
+sandbox = Jido.Sandbox.new()
 
 # Write a file
-{:ok, sandbox} = JidoSandbox.write(sandbox, "/hello.txt", "Hello, World!")
+{:ok, sandbox} = Jido.Sandbox.write(sandbox, "/hello.txt", "Hello, World!")
 
 # Read it back
-{:ok, content} = JidoSandbox.read(sandbox, "/hello.txt")
+{:ok, content} = Jido.Sandbox.read(sandbox, "/hello.txt")
 # => "Hello, World!"
 
 # List directory
-{:ok, files} = JidoSandbox.list(sandbox, "/")
+{:ok, files} = Jido.Sandbox.list(sandbox, "/")
 # => ["hello.txt"]
 
 # Create a snapshot
-{:ok, snapshot_id, sandbox} = JidoSandbox.snapshot(sandbox)
+{:ok, snapshot_id, sandbox} = Jido.Sandbox.snapshot(sandbox)
 
 # Make changes and restore
-{:ok, sandbox} = JidoSandbox.delete(sandbox, "/hello.txt")
-{:ok, sandbox} = JidoSandbox.restore(sandbox, snapshot_id)
+{:ok, sandbox} = Jido.Sandbox.delete(sandbox, "/hello.txt")
+{:ok, sandbox} = Jido.Sandbox.restore(sandbox, snapshot_id)
 # File is back!
 
 # Execute Lua (with VFS access)
-{:ok, result, sandbox} = JidoSandbox.eval_lua(sandbox, """
+{:ok, result, sandbox} = Jido.Sandbox.eval_lua(sandbox, """
   local content = vfs.read("/hello.txt")
   return string.upper(content)
 """)

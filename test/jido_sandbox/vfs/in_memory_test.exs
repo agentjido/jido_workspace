@@ -1,7 +1,7 @@
-defmodule JidoSandbox.VFS.InMemoryTest do
+defmodule Jido.Sandbox.VFS.InMemoryTest do
   use ExUnit.Case
 
-  alias JidoSandbox.VFS.InMemory
+  alias Jido.Sandbox.VFS.InMemory
 
   describe "new/0" do
     test "creates empty VFS with root directory" do

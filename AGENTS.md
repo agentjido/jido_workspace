@@ -1,4 +1,4 @@
-# AGENTS.md - Jido Sandbox
+# AGENTS.md - Jido.Sandbox
 
 ## Project Overview
 
@@ -20,20 +20,20 @@ Jido Sandbox provides a lightweight, pure-BEAM sandbox for LLM tool calls. It im
 
 ## Public API
 
-- `JidoSandbox.new/1` - Create a new sandbox
-- `JidoSandbox.write/3` - Write file to VFS
-- `JidoSandbox.read/2` - Read file from VFS
-- `JidoSandbox.list/2` - List directory contents
-- `JidoSandbox.delete/2` - Delete file from VFS
-- `JidoSandbox.mkdir/2` - Create directory
-- `JidoSandbox.snapshot/1` - Save VFS state
-- `JidoSandbox.restore/2` - Restore VFS state
-- `JidoSandbox.eval_lua/2` - Execute Lua code
+- `Jido.Sandbox.new/1` - Create a new sandbox
+- `Jido.Sandbox.write/3` - Write file to VFS
+- `Jido.Sandbox.read/2` - Read file from VFS
+- `Jido.Sandbox.list/2` - List directory contents
+- `Jido.Sandbox.delete/2` - Delete file from VFS
+- `Jido.Sandbox.mkdir/2` - Create directory
+- `Jido.Sandbox.snapshot/1` - Save VFS state
+- `Jido.Sandbox.restore/2` - Restore VFS state
+- `Jido.Sandbox.eval_lua/2` - Execute Lua code
 
 ## Architecture
 
-- `JidoSandbox` - Public API module
-- `JidoSandbox.Sandbox` - Core sandbox struct and operations
-- `JidoSandbox.VFS` - VFS behavior
-- `JidoSandbox.VFS.InMemory` - In-memory VFS implementation
-- `JidoSandbox.Lua.Runtime` - Sandboxed Lua execution
+- `Jido.Sandbox` - Public API module
+- `Jido.Sandbox.Sandbox` - Core sandbox struct and operations
+- `Jido.Sandbox.VFS` - VFS behavior
+- `Jido.Sandbox.VFS.InMemory` - In-memory VFS implementation
+- `Jido.Sandbox.Lua.Runtime` - Sandboxed Lua execution

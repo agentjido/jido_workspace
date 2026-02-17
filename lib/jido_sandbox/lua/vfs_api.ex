@@ -1,4 +1,4 @@
-defmodule JidoSandbox.Lua.VfsApi do
+defmodule Jido.Sandbox.Lua.VfsApi do
   @moduledoc """
   Lua API for VFS operations.
 
@@ -14,7 +14,7 @@ defmodule JidoSandbox.Lua.VfsApi do
 
   use Lua.API, scope: "vfs"
 
-  alias JidoSandbox.VFS.InMemory
+  alias Jido.Sandbox.VFS.InMemory
 
   @vfs_key [:_G, :__vfs__]
 

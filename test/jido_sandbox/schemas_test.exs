@@ -1,7 +1,7 @@
-defmodule JidoSandbox.SchemasTest do
+defmodule Jido.Sandbox.SchemasTest do
   use ExUnit.Case
 
-  alias JidoSandbox.Schemas
+  alias Jido.Sandbox.Schemas
 
   describe "validate_path/1" do
     test "accepts valid absolute paths" do

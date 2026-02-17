@@ -1,7 +1,7 @@
-defmodule JidoSandbox.VFS.PathTest do
+defmodule Jido.Sandbox.VFS.PathTest do
   use ExUnit.Case
 
-  alias JidoSandbox.VFS.Path
+  alias Jido.Sandbox.VFS.Path
 
   describe "normalize/1" do
     test "accepts valid absolute paths" do

@@ -1,4 +1,4 @@
-defmodule JidoSandbox.MixProject do
+defmodule Jido.Sandbox.MixProject do
   use Mix.Project
 
   @version "0.1.0"
@@ -9,14 +9,14 @@ defmodule JidoSandbox.MixProject do
     [
       app: :jido_sandbox,
       version: @version,
-      elixir: "~> 1.17",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
 
       # Documentation
-      name: "Jido Sandbox",
+      name: "Jido.Sandbox",
       description: @description,
       source_url: @source_url,
       homepage_url: @source_url,
@@ -30,10 +30,7 @@ defmodule JidoSandbox.MixProject do
       ],
 
       # Dialyzer
-      dialyzer: [
-        plt_local_path: "priv/plts/project.plt",
-        plt_core_path: "priv/plts/core.plt"
-      ]
+      dialyzer: [plt_local_path: "priv/plts/project.plt", plt_core_path: "priv/plts/core.plt"]
     ]
   end
 
@@ -59,13 +56,16 @@ defmodule JidoSandbox.MixProject do
   defp deps do
     [
       # Runtime
-      {:zoi, "~> 0.14"},
+      {:zoi, "~> 0.16"},
+      {:jido_shell, github: "agentjido/jido_shell", branch: "main"},
+      {:jido_vfs, github: "agentjido/jido_vfs", branch: "main", override: true},
       {:lua, "~> 0.4.0"},
 
       # Dev/Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:doctor, "~> 0.21", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: [:dev, :test]},
       {:git_hooks, "~> 0.8", only: [:dev, :test], runtime: false},
       {:git_ops, "~> 2.9", only: :dev, runtime: false}
@@ -81,14 +81,25 @@ defmodule JidoSandbox.MixProject do
         "format --check-formatted",
         "compile --warnings-as-errors",
         "credo --min-priority higher",
-        "dialyzer"
+        "dialyzer",
+        "doctor --raise"
       ]
     ]
   end
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README.md", "CHANGELOG.md", "usage-rules.md"],
+      files: [
+        ".formatter.exs",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "LICENSE",
+        "README.md",
+        "config",
+        "lib",
+        "mix.exs",
+        "usage-rules.md"
+      ],
       maintainers: ["Agent Jido Team"],
       licenses: ["Apache-2.0"],
       links: %{
@@ -103,7 +114,7 @@ defmodule JidoSandbox.MixProject do
 
   defp docs do
     [
-      main: "readme",
+      main: "Jido.Sandbox",
       source_ref: "v#{@version}",
       extras: [
         "README.md",

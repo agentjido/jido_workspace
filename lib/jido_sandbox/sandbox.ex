@@ -1,148 +1,100 @@
-defmodule JidoSandbox.Sandbox do
+defmodule Jido.Sandbox do
   @moduledoc """
-  Core sandbox struct containing VFS state and snapshots.
+  Public entrypoint for sandbox operations.
 
-  This module handles all sandbox operations including file management,
-  snapshots, and Lua evaluation.
+  Jido Sandbox provides a lightweight, pure-BEAM sandbox for LLM tool calls.
+  It implements an in-memory virtual filesystem (VFS) and sandboxed Lua execution.
+
+  ## Key Constraints
+
+  - No real filesystem access - all files are virtual
+  - No networking - no HTTP, sockets, or external connections
+  - No shell/process execution - no System.cmd, ports, or NIFs
+  - Lua-only scripting - sandboxed Lua with VFS bindings only
+  - All paths are virtual and absolute - must start with `/`
+
+  ## Example
+
+      sandbox = Jido.Sandbox.new()
+      {:ok, sandbox} = Jido.Sandbox.write(sandbox, "/hello.txt", "Hello!")
+      {:ok, content} = Jido.Sandbox.read(sandbox, "/hello.txt")
+
   """
 
-  alias JidoSandbox.Lua.Runtime
-  alias JidoSandbox.VFS.InMemory
+  alias Jido.Sandbox.Sandbox
 
-  @type t :: %__MODULE__{
-          vfs: struct(),
-          snapshots: %{String.t() => struct()},
-          next_snapshot_id: non_neg_integer()
-        }
-
-  defstruct vfs: nil, snapshots: %{}, next_snapshot_id: 0
+  @type t :: Sandbox.t()
 
   @doc """
-  Create a new sandbox with an empty VFS.
-
-  ## Options
-
-  Currently no options are supported.
+  Create a new sandbox.
 
   ## Examples
 
-      iex> sandbox = JidoSandbox.Sandbox.new()
-      iex> is_struct(sandbox, JidoSandbox.Sandbox)
+      iex> sandbox = Jido.Sandbox.new()
+      iex> is_struct(sandbox, Jido.Sandbox.Sandbox)
       true
 
   """
   @spec new(keyword()) :: t()
-  def new(_opts \\ []) do
-    %__MODULE__{vfs: InMemory.new()}
-  end
+  defdelegate new(opts \\ []), to: Sandbox
 
   @doc """
   Write content to a file in the sandbox.
 
   ## Examples
 
-      iex> sandbox = JidoSandbox.Sandbox.new()
-      iex> {:ok, sandbox} = JidoSandbox.Sandbox.write(sandbox, "/test.txt", "hello")
-      iex> {:ok, "hello"} = JidoSandbox.Sandbox.read(sandbox, "/test.txt")
+      iex> sandbox = Jido.Sandbox.new()
+      iex> {:ok, sandbox} = Jido.Sandbox.write(sandbox, "/test.txt", "content")
+      iex> {:ok, "content"} = Jido.Sandbox.read(sandbox, "/test.txt")
 
   """
   @spec write(t(), String.t(), iodata()) :: {:ok, t()} | {:error, term()}
-  def write(%__MODULE__{} = sandbox, path, content) do
-    case InMemory.write(sandbox.vfs, path, content) do
-      {:ok, vfs} -> {:ok, %{sandbox | vfs: vfs}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  defdelegate write(sandbox, path, content), to: Sandbox
 
   @doc """
   Read content from a file in the sandbox.
   """
   @spec read(t(), String.t()) :: {:ok, binary()} | {:error, term()}
-  def read(%__MODULE__{} = sandbox, path) do
-    InMemory.read(sandbox.vfs, path)
-  end
+  defdelegate read(sandbox, path), to: Sandbox
 
   @doc """
   List entries in a directory.
   """
   @spec list(t(), String.t()) :: {:ok, [String.t()]} | {:error, term()}
-  def list(%__MODULE__{} = sandbox, path) do
-    InMemory.list(sandbox.vfs, path)
-  end
+  defdelegate list(sandbox, path), to: Sandbox
 
   @doc """
-  Delete a file or empty directory from the sandbox.
+  Delete a file from the sandbox.
   """
   @spec delete(t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def delete(%__MODULE__{} = sandbox, path) do
-    case InMemory.delete(sandbox.vfs, path) do
-      {:ok, vfs} -> {:ok, %{sandbox | vfs: vfs}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  defdelegate delete(sandbox, path), to: Sandbox
 
   @doc """
   Create a directory in the sandbox.
   """
   @spec mkdir(t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def mkdir(%__MODULE__{} = sandbox, path) do
-    case InMemory.mkdir(sandbox.vfs, path) do
-      {:ok, vfs} -> {:ok, %{sandbox | vfs: vfs}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
+  defdelegate mkdir(sandbox, path), to: Sandbox
 
   @doc """
   Create a snapshot of the current VFS state.
 
-  Returns `{:ok, snapshot_id, updated_sandbox}`.
+  Returns the snapshot ID that can be used with `restore/2`.
   """
   @spec snapshot(t()) :: {:ok, String.t(), t()}
-  def snapshot(%__MODULE__{} = sandbox) do
-    id = "snap-#{sandbox.next_snapshot_id}"
-    snapshots = Map.put(sandbox.snapshots, id, sandbox.vfs)
-    {:ok, id, %{sandbox | snapshots: snapshots, next_snapshot_id: sandbox.next_snapshot_id + 1}}
-  end
+  defdelegate snapshot(sandbox), to: Sandbox
 
   @doc """
   Restore VFS to a previous snapshot.
   """
   @spec restore(t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def restore(%__MODULE__{} = sandbox, id) do
-    case Map.fetch(sandbox.snapshots, id) do
-      {:ok, vfs} -> {:ok, %{sandbox | vfs: vfs}}
-      :error -> {:error, :unknown_snapshot}
-    end
-  end
+  defdelegate restore(sandbox, snapshot_id), to: Sandbox
 
   @doc """
   Evaluate Lua code in the sandbox.
 
-  The Lua environment has access to VFS operations via the `vfs` namespace:
-  - `vfs.read(path)` - Read file contents
-  - `vfs.write(path, content)` - Write file  
-  - `vfs.list(path)` - List directory contents
-  - `vfs.mkdir(path)` - Create directory
-  - `vfs.delete(path)` - Delete file or empty directory
-
-  Dangerous globals are removed for security (os, io, package, debug, etc.).
-
-  ## Examples
-
-      iex> sandbox = JidoSandbox.Sandbox.new()
-      iex> {:ok, result, _sandbox} = JidoSandbox.Sandbox.eval_lua(sandbox, "return 1 + 1")
-      iex> result
-      2
-
+  Returns `{:ok, result, updated_sandbox}` on success.
+  Returns `{:error, reason, sandbox}` on failure.
   """
   @spec eval_lua(t(), String.t()) :: {:ok, term(), t()} | {:error, term(), t()}
-  def eval_lua(%__MODULE__{} = sandbox, code) when is_binary(code) do
-    case Runtime.eval(code, sandbox.vfs) do
-      {:ok, result, vfs} ->
-        {:ok, result, %{sandbox | vfs: vfs}}
-
-      {:error, reason} ->
-        {:error, reason, sandbox}
-    end
-  end
+  defdelegate eval_lua(sandbox, code), to: Sandbox
 end
