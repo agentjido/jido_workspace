@@ -58,7 +58,7 @@ defmodule Jido.Workspace.MixProject do
       # Runtime
       {:zoi, "~> 0.16"},
       {:splode, "~> 0.3", override: true},
-      {:jido_shell, github: "agentjido/jido_shell", branch: "main"},
+      {:jido_shell, path: "../jido_shell", override: true},
       {:jido_vfs, github: "agentjido/jido_vfs", branch: "main", override: true},
       {:sprites, git: "https://github.com/mikehostetler/sprites-ex.git", override: true},
 
