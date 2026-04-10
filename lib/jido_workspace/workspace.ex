@@ -213,14 +213,13 @@ defmodule Jido.Workspace.Workspace do
   @doc """
   Stops the active workspace session if present.
   """
-  @spec stop_session(t()) :: {:ok, t()} | {:error, term()}
+  @spec stop_session(t()) :: {:ok, t()}
   def stop_session(%__MODULE__{session_id: nil} = workspace), do: {:ok, workspace}
 
   def stop_session(%__MODULE__{} = workspace) do
     case ShellAgent.stop(workspace.session_id) do
       :ok -> {:ok, %{workspace | session_id: nil}}
       {:error, :not_found} -> {:ok, %{workspace | session_id: nil}}
-      {:error, reason} -> {:error, normalize_error(reason)}
     end
   end
 
