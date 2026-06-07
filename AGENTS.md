@@ -45,3 +45,7 @@ filesystem adapter support.
 - `Jido.Workspace` - Public API module
 - `Jido.Workspace.Workspace` - Core workspace struct and operations
 - `Jido.Workspace.Schemas` - Zoi validation schemas
+
+## Release Hygiene
+
+- Do not modify `CHANGELOG.md`; release notes are generated from Git history during release, so keep changes focused on proper Conventional Commits.
