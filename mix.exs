@@ -56,7 +56,7 @@ defmodule Jido.Workspace.MixProject do
   defp deps do
     [
       # Runtime
-      {:zoi, "~> 0.17"},
+      {:zoi, "~> 0.18.11"},
       {:splode, ">= 0.2.9 and < 0.4.0", override: true},
       {:jido_shell, github: "agentjido/jido_shell", branch: "main", override: true},
       {:jido_vfs, github: "agentjido/jido_vfs", branch: "main", override: true},
