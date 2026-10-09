@@ -1,0 +1,9 @@
+{
+  "scenario": "05_vfs_multi_mount_artifact_routing",
+  "status": "ok",
+  "workspace_id": "spec-05-1791567227143974-1",
+  "mount_paths": ["/", "/repo", "/scratch"],
+  "repo_mount_prefix": "/private/var/folders/8l/nyn2qp4d441b1zrgypxgry7m0000gn/T/jido-v25-15x06ntz/jido_workspace/tmp/Jido.Workspace.Integration.Scenario05VFSMultiMountArtifactRoutingTest/test-multi-mount-routing-isolates-scratch-and-repo-paths-ee425738/05_vfs_multi_mount_artifact_routing/repo_mount",
+  "repo_file_exists": true,
+  "scratch_routed_away_from_root": true
+}

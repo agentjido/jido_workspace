@@ -1,0 +1,8 @@
+{
+  "scenario": "03_workspace_snapshot_restore",
+  "status": "ok",
+  "workspace_id": "spec-03-1791567227308341-5",
+  "snapshot_id": "snap-0",
+  "restored_original": true,
+  "removed_new_file": true
+}

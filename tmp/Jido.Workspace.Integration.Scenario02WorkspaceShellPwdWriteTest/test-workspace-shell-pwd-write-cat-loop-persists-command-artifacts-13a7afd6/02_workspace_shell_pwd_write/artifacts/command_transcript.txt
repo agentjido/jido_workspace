@@ -1,0 +1,8 @@
+$ pwd
+/
+
+$ write /artifacts/from_shell.txt hello
+wrote 5 bytes to /artifacts/from_shell.txt
+
+$ cat /artifacts/from_shell.txt
+hello
