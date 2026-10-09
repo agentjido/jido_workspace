@@ -1,0 +1,8 @@
+{
+  "scenario": "02_workspace_shell_pwd_write",
+  "status": "ok",
+  "workspace_id": "spec-02-1791567227297658-4",
+  "pwd": "/",
+  "shell_file": "/artifacts/from_shell.txt",
+  "transcript_file": "/artifacts/command_transcript.txt"
+}

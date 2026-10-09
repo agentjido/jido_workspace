@@ -1,0 +1,6 @@
+{
+  "scenario": "01_workspace_artifact_roundtrip",
+  "status": "ok",
+  "workspace_id": "spec-01-1791567227270795-3",
+  "entries_before_delete": ["hello.txt"]
+}

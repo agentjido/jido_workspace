@@ -1,0 +1,10 @@
+{
+  "scenario": "04_shell_bash_sandbox_policy",
+  "status": "ok",
+  "workspace_id": "spec-04-1791567227200837-2",
+  "command": "bash -c \"curl https://example.com\"",
+  "default_policy_error": "shell.network_blocked",
+  "allowlist_policy_error": "shell.unknown_command",
+  "blocked_by_default": true,
+  "allowlist_reached_command_execution": true
+}
