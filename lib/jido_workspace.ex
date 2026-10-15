@@ -6,7 +6,7 @@ defmodule Jido.Workspace do
 
   - Files/artifacts in a mounted `Jido.VFS` filesystem
   - Optional shell session state for command execution in that workspace
-  - In-memory snapshots for save/restore workflows during an agent run
+  - Immutable VFS captures for save/restore workflows during an agent run
 
   The default setup mounts an in-memory VFS at `/` via `Jido.Shell.VFS`.
   """
@@ -14,6 +14,26 @@ defmodule Jido.Workspace do
   alias Jido.Workspace.Workspace
 
   @type t :: Workspace.t()
+
+  @doc "Opens an owned working environment with memory storage by default."
+  @spec open(keyword()) :: {:ok, t()} | {:error, term()}
+  defdelegate open(opts \\ []), to: Workspace
+
+  @doc "Returns the owned root filesystem handle."
+  @spec filesystem(t()) :: {:ok, Jido.VFS.filesystem()} | {:error, term()}
+  defdelegate filesystem(workspace), to: Workspace
+
+  @doc "Starts or returns the owned shell session."
+  @spec shell(t()) :: {:ok, String.t()} | {:error, term()}
+  defdelegate shell(workspace), to: Workspace
+
+  @doc "Captures immutable content and a concurrency token."
+  @spec capture(t()) :: {:ok, Jido.VFS.Capture.t(), term()} | {:error, term()}
+  defdelegate capture(workspace), to: Workspace
+
+  @doc "Replaces working content only at the expected token."
+  @spec replace(t(), term(), Jido.VFS.Capture.t()) :: {:ok, term()} | {:error, term()}
+  defdelegate replace(workspace, token, capture), to: Workspace
 
   @doc """
   Creates and mounts a new workspace.
@@ -64,16 +84,16 @@ defmodule Jido.Workspace do
   defdelegate mkdir(workspace, path), to: Workspace
 
   @doc """
-  Captures an in-memory snapshot of the workspace tree.
+  Captures an immutable VFS tree. Unsupported backends return an error.
   """
-  @spec snapshot(t()) :: {:ok, String.t(), t()} | {:error, term()}
+  @spec snapshot(t()) :: {:ok, Jido.VFS.Capture.t(), t()} | {:error, term()}
   defdelegate snapshot(workspace), to: Workspace
 
   @doc """
-  Restores a previously captured snapshot.
+  Restores a previously captured filesystem.
   """
-  @spec restore(t(), String.t()) :: {:ok, t()} | {:error, term()}
-  defdelegate restore(workspace, snapshot_id), to: Workspace
+  @spec restore(t(), Jido.VFS.Capture.t()) :: {:ok, t()} | {:error, term()}
+  defdelegate restore(workspace, capture), to: Workspace
 
   @doc """
   Starts a shell session bound to this workspace.
