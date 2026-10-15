@@ -48,9 +48,9 @@ workspace = Jido.Workspace.new()
 {:ok, ["hello.txt"]} = Jido.Workspace.list(workspace, "/")
 
 # Snapshot and restore
-{:ok, snapshot_id, workspace} = Jido.Workspace.snapshot(workspace)
+{:ok, capture, workspace} = Jido.Workspace.snapshot(workspace)
 {:ok, workspace} = Jido.Workspace.delete(workspace, "/hello.txt")
-{:ok, workspace} = Jido.Workspace.restore(workspace, snapshot_id)
+{:ok, workspace} = Jido.Workspace.restore(workspace, capture)
 
 # Run a shell command in the workspace
 {:ok, output, workspace} = Jido.Workspace.run(workspace, "pwd")
@@ -86,3 +86,38 @@ Apache-2.0
 - Core workspace suite: `mix test`
 - Full quality gate: `mix quality`
 - Keep scenario-heavy testing in `jido_workspace_scenarios`
+
+## Owned workspace lifecycle
+
+```elixir
+{:ok, workspace} = Jido.Workspace.open(owner: self())
+{:ok, filesystem} = Jido.Workspace.filesystem(workspace)
+{:ok, session} = Jido.Workspace.shell(workspace)
+{:ok, saved, token} = Jido.Workspace.capture(workspace)
+{:ok, next_token} = Jido.VFS.apply_edits(filesystem, token, [{:write, "file", "new"}])
+{:ok, _} = Jido.Workspace.replace(workspace, next_token, saved)
+{:ok, _} = Jido.Workspace.close(workspace)
+```
+
+Workspace owns storage and its optional shell session. Shell borrows that storage.
+Repeated `shell/1` calls return the same active session. Owner exit closes the
+session and storage. A storage process failure closes the environment; it does
+not restart an empty filesystem. Close is idempotent and stops active local
+commands before storage is released. Captures remain readable after close.
+
+### Snapshot API change
+
+`snapshot/1` retains its three-element result tuple, but now returns an immutable
+`Jido.VFS.Capture` instead of a `snap-N` string. Pass that value to `restore/2`.
+There is no workspace snapshot map or counter. `restore/2` captures a current
+precondition and performs checked replacement; use `replace/3` to supply the
+expected token from an earlier read explicitly.
+
+Only the memory backend currently provides atomic capture and replacement.
+Local storage now returns `UnsupportedOperation` instead of copying a tree that
+can change during capture. Capture and replacement refuse multiple mounts.
+The attached shell session sees the owned root filesystem; additional mounts
+remain available through the legacy workspace file API, not that shell session.
+
+BeamLoom version IDs, branches, merge policy, acceptance receipts, and deployment
+remain outside this package. Storage captures carry no branch history.
