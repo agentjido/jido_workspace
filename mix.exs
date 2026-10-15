@@ -59,8 +59,8 @@ defmodule Jido.Workspace.MixProject do
       {:zoi, "~> 0.18.11"},
       {:splode, ">= 0.2.9 and < 0.4.0", override: true},
       # Coordinated interfaces: agentjido/jido_shell#73 and agentjido/jido_vfs#46.
-      {:jido_shell, github: "agentjido/jido_shell", ref: "0c683b2126f43cef75911803fa67ebc830b5bcb5", override: true},
-      {:jido_vfs, github: "agentjido/jido_vfs", ref: "6eae3538c0e35057f85661be6c2066c31050f3d8", override: true},
+      {:jido_shell, github: "agentjido/jido_shell", ref: "e46a4e33069b2e961ef0e6b14de50a574c7730d7", override: true},
+      {:jido_vfs, github: "agentjido/jido_vfs", ref: "3383487d48603c1b935858a964f53a44989efa21", override: true},
 
       # Dev/Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
