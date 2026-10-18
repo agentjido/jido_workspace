@@ -89,7 +89,7 @@ experiments. This result does not establish a general BEAM language advantage.
 Run from the jido_workspace root after the real-tree test:
 
 ```sh
-mise exec -- mix run bench/search/diagnose.exs
+mix run bench/search/diagnose.exs
 ```
 
 The script stops if source bytes differ from the saved real-test manifest.

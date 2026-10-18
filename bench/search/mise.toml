@@ -1,5 +1,0 @@
-# Versions for this experiment. Elixir and Erlang match the parent project.
-[tools]
-elixir = "1.20.4"
-erlang = "29.1"
-ripgrep = "15.1.0"

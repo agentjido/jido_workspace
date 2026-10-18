@@ -45,7 +45,7 @@ Jido Signals. Its Actions and Signal adapter remain test-only. No model is used.
 | Module | Responsibility |
 | --- | --- |
 | `Jido.Workspace` | Working-file and Shell API |
-| `Jido.Workspace.Lifetime` | Ownership of mounted storage and Shell sessions |
+| Jido.Workspace.Lifetime (internal) | Ownership of mounted storage and Shell sessions |
 | `Jido.Workspace.Sandbox` | Local processes, Docker/gVisor containers, files, and retained services |
 | `Jido.Workspace.Deploy` | Targets, preparation plans, execution records, and recovery |
 | `Jido.Workspace.Deploy.OTP` | OTP release handling and explicit state migration |
@@ -188,11 +188,11 @@ migration can restart the target and lose in-memory state.
 Run these commands from this folder:
 
 ```sh
-mise exec -- mix deps.get
-mise exec -- mix test
-mise exec -- mix test.integration
-mise exec -- mix format --check-formatted
-mise exec -- mix compile --warnings-as-errors
+mix deps.get
+mix test
+mix test.integration
+mix format --check-formatted
+mix compile --warnings-as-errors
 ```
 
 The integration alias starts a separate BEAM instance for each example file.
@@ -209,3 +209,10 @@ uses the Workspace VFS revision. Other backends report `kind: :backend`, the
 backend module and session PID as owner, `path: :unknown`, and
 `revision: :unavailable`. A local VFS revision cannot prove the state of remote
 files. These backends accept `files: :current` and refuse pinned file views.
+
+## Dependency checkouts
+
+When sibling `jido_shell/` and `jido_vfs/` folders contain Mix projects, this
+package uses them as local dependencies. Without those folders, it uses the
+upstream Git revisions recorded in `mix.exs`. This supports both local stack
+work and standalone CI checkouts.

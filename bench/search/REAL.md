@@ -3,8 +3,8 @@
 Run from the `jido_workspace` project root:
 
 ```sh
-mise exec -- mix run bench/search/real.exs
-mise exec -- mix run bench/search/real.exs --source ../beam_weaver --runs 5 --output bench/search/results/real-five.json
+mix run bench/search/real.exs
+mix run bench/search/real.exs --source ../beam_weaver --runs 5 --output bench/search/results/real-five.json
 ```
 
 The runner copies the selected files to a new temporary directory. It includes

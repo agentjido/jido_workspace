@@ -3,8 +3,8 @@
 Run from the `jido_workspace` project root:
 
 ```sh
-mise exec -- mix run bench/search/probe.exs --runs 5 --output bench/search/results/probes-sparse.json
-mise exec -- mix run bench/search/probe.exs --sizes medium --dense --runs 3 --output bench/search/results/probes-dense.json
+mix run bench/search/probe.exs --runs 5 --output bench/search/results/probes-sparse.json
+mix run bench/search/probe.exs --sizes medium --dense --runs 3 --output bench/search/results/probes-dense.json
 ```
 
 The default sizes are 16 MiB and 128 MiB. Files and queries use the same

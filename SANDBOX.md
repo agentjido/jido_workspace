@@ -133,13 +133,13 @@ process groups, remote providers, leases, checkpoints, and tunnels are later wor
 
 ## Tests
 
-Use the versions in `mise.toml`. Review and trust the file with `mise trust`.
+Use Elixir 1.18 or later and a compatible Erlang/OTP release.
 
 ```sh
-mise exec -- mix test
-mise exec -- mix test.integration
-mise exec -- mix format --check-formatted
-mise exec -- mix compile --warnings-as-errors
+mix test
+mix test.integration
+mix format --check-formatted
+mix compile --warnings-as-errors
 ```
 
 Integration examples are in `test/examples/` and have the `:integration` tag.
@@ -152,9 +152,9 @@ engine or image is unavailable. Without the flag, these tests are marked skipped
 ```sh
 # Optional preparation if this image is not installed:
 docker pull alpine:latest
-JIDO_SANDBOX_DOCKER=1 mise exec -- mix test.integration
+JIDO_SANDBOX_DOCKER=1 mix test.integration
 # Run the same tests on a Linux engine with registered runsc:
-JIDO_SANDBOX_DOCKER=1 JIDO_SANDBOX_RUNTIME=runsc mise exec -- mix test.integration
+JIDO_SANDBOX_DOCKER=1 JIDO_SANDBOX_RUNTIME=runsc mix test.integration
 ```
 
 `JIDO_SANDBOX_IMAGE` selects another installed image with Alpine-compatible

@@ -590,10 +590,10 @@ executor's default retries would otherwise repeat effectful calls and replies.
 Run from `jido_workspace`:
 
 ```sh
-mise exec -- mix test.integration
-mise exec -- mix test
-mise exec -- mix format --check-formatted
-mise exec -- mix compile --warnings-as-errors
+mix test.integration
+mix test
+mix format --check-formatted
+mix compile --warnings-as-errors
 ```
 
 Jido is a test-only dependency at this stage. The core runtime remains usable

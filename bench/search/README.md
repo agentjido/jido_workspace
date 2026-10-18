@@ -24,14 +24,13 @@ time. It does not represent the maximum possible BEAM search speed.
 Run from this project root:
 
 ```sh
-mise exec -- mix run bench/search/run.exs
-mise exec -- mix run bench/search/run.exs --sizes small --runs 3
-mise exec -- mix run bench/search/run.exs --runs 20 --output bench/search/results/run-20.json
+mix run bench/search/run.exs
+mix run bench/search/run.exs --sizes small --runs 3
+mix run bench/search/run.exs --runs 20 --output bench/search/results/run-20.json
 ```
 
-`bench/search/mise.toml` records the experiment's tool versions. The commands
-above use tools on the parent project's PATH. Check the recorded `rg` version
-in each result when you compare runs.
+The commands use Elixir, Erlang/OTP, and `rg` from your PATH. Check the tool
+versions recorded in each result when you compare runs.
 
 The default run uses seven samples per query. It writes JSON with each sample,
 median, p95, match count, setup times, and runtime versions. With seven samples,
@@ -83,12 +82,12 @@ experiments after this first run.
 Run all integration examples through the integration runner:
 
 ```sh
-mise exec -- mix test.integration
+mix test.integration
 ```
 
 The integration alias starts each example file in a separate BEAM instance.
 To run this experiment's file directly, use:
 
 ```sh
-mise exec -- mix test test/examples/search_spike_test.exs --include integration
+mix test test/examples/search_spike_test.exs --include integration
 ```

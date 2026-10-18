@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: agentjido/github-actions/.github/workflows/jido-ci.yml@v5
+    secrets: inherit
+    with:
+      credo_command: mix credo --min-priority higher
+      validate_hex_package: false
+      docs_command: mix docs -f html
+      test_command: mix test

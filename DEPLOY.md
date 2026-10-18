@@ -187,14 +187,14 @@ general task hooks, and BeamWeaver integration are later work.
 
 ## Tests
 
-Use the versions in `mise.toml`. Review and trust the file with `mise trust`.
+Use Elixir 1.18 or later and a compatible Erlang/OTP release.
 
 ```sh
-mise exec -- mix deps.get
-mise exec -- mix test
-mise exec -- mix test.integration
-mise exec -- mix format --check-formatted
-mise exec -- mix compile --warnings-as-errors
+mix deps.get
+mix test
+mix test.integration
+mix format --check-formatted
+mix compile --warnings-as-errors
 ```
 
 Each `test/examples/` file has the `:integration` tag. The alias runs each file
