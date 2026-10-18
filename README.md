@@ -63,6 +63,8 @@ An in-memory workspace and an OS environment are explicit, separate resources.
 Opening one does not open the other. Deploy takes an Sandbox handle.
 A deployment `Snapshot` is a file payload with a digest and a caller-supplied
 source ID. It does not own branches, commits, merges, or source history.
+`Deploy.Snapshot.from_capture/2` converts a fixed VFS capture into that payload.
+Later live edits do not change the payload. See [memory capture deployment](DEPLOY.md#vfs-memory-captures).
 
 ## Target and file boundaries
 

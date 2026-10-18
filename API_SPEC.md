@@ -357,7 +357,12 @@ Deploy.await(deployment, operation_id, timeout_ms \\ 30_000) # result(Operation.
 Deploy.recover(deployment, operation_id, artifact, opts \\ []) # result(Plan.t())
 ```
 
-Keep `Snapshot.new`, `Snapshot.from_directory`, and `Artifact.new`. A Snapshot
+Keep `Snapshot.new`, `Snapshot.from_directory`, and `Artifact.new`.
+`Snapshot.from_capture(capture, opts \\ [])` converts a fixed VFS capture without
+reading live storage. It retains relative paths, bytes, and regular or executable
+file modes. It omits empty directories and other metadata. Invalid captures are
+refused. Source identity is supplied through `:id`; the default is the digest.
+A Snapshot
 has a caller-supplied source ID, content digest, and relative file entries. An
 Artifact has kind, version, and Snapshot. Neither owns source history.
 

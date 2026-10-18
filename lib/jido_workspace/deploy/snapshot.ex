@@ -43,6 +43,57 @@ defmodule Jido.Workspace.Deploy.Snapshot do
     with {:ok, entries} <- read_tree(Path.expand(directory), "", %{}), do: new(entries, opts)
   end
 
+  @doc """
+  Creates a deployment payload from a fixed VFS capture without reading live storage.
+
+  Paths stay relative. Regular and executable modes become 0644 and 0755.
+  Directories are validated but omitted, including empty directories. Other
+  metadata is omitted. Invalid entries, paths, modes, and missing parents are
+  refused. The optional `:id` is the caller's source identity, not a VFS revision.
+  Without `:id`, the content digest is used, as in `new/2`.
+  """
+  @spec from_capture(Jido.VFS.Capture.t(), keyword()) :: {:ok, t()} | {:error, :invalid_capture}
+  def from_capture(capture, opts \\ [])
+
+  def from_capture(%Jido.VFS.Capture{entries: entries} = capture, opts) when is_map(entries) do
+    with {:ok, entries} <- Jido.VFS.entries(capture),
+         true <- Enum.all?(entries, &capture_entry?(&1, entries)) do
+      files =
+        for {path, %{type: :file, content: bytes, metadata: meta}} <- entries, into: %{} do
+          mode = if Map.get(meta, :mode, :regular) == :executable, do: 0o755, else: 0o644
+          {path, %{bytes: bytes, mode: mode}}
+        end
+
+      new(files, opts)
+    else
+      _ -> {:error, :invalid_capture}
+    end
+  end
+
+  def from_capture(_, _), do: {:error, :invalid_capture}
+
+  defp capture_entry?({path, entry}, entries) when is_binary(path) do
+    valid_path?(path) and String.valid?(path) and capture_value?(entry) and
+      capture_parent?(Path.dirname(path), entries)
+  end
+
+  defp capture_entry?(_, _), do: false
+
+  defp capture_value?(%{type: :directory, metadata: meta}), do: is_map(meta)
+
+  defp capture_value?(%{type: :file, content: bytes, metadata: meta})
+       when is_binary(bytes) and is_map(meta),
+       do: Map.get(meta, :mode, :regular) in [:regular, :executable]
+
+  defp capture_value?(_), do: false
+
+  defp capture_parent?(".", _), do: true
+
+  defp capture_parent?(path, entries),
+    do:
+      match?(%{type: :directory}, entries[path]) and
+        capture_parent?(Path.dirname(path), entries)
+
   @doc "Checks snapshot paths, modes, and content digest."
   def valid?(%__MODULE__{entries: entries} = snapshot) when is_map(entries) do
     case new(snapshot.entries, id: snapshot.id) do

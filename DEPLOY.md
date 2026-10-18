@@ -85,6 +85,49 @@ after planning are preserved. It tests both upgrade and downgrade migration.
 The SDK does not make a release permanent. Normal restart boots the initial
 permanent release. Persistent boot selection and ERTS replacement are later work.
 
+## VFS memory captures
+
+Use `Snapshot.from_capture/2` to convert a fixed VFS capture into a deployment
+payload. The conversion reads the capture, not the live filesystem. It also
+works after the memory storage process stops.
+
+```elixir
+alias Jido.Workspace
+alias Jido.Workspace.Deploy.{Artifact, Snapshot}
+
+{:ok, workspace} = Workspace.open(policy: :workspace_write)
+:ok = Workspace.write(workspace, "/message.txt", "accepted content")
+{:ok, saved, _revision} = Workspace.capture(workspace)
+:ok = Workspace.write(workspace, "/message.txt", "later draft")
+{:ok, snapshot} = Snapshot.from_capture(saved, id: "accepted-source-42")
+{:ok, artifact} = Artifact.new(:source, "42", snapshot)
+:ok = Workspace.close(workspace)
+
+# Deploy the saved content through a separately opened Sandbox target.
+{:ok, plan} = Deploy.prepare(session, artifact)
+{:ok, operation_id} = Deploy.apply(session, plan)
+{:ok, record} = Deploy.await(session, operation_id)
+```
+
+Paths stay relative. File bytes are unchanged. VFS `:regular` and `:executable`
+modes become `0o644` and `0o755`. Other metadata and empty directories are
+omitted. Invalid paths, missing parents, unsupported modes, and unsupported
+entry types return `{:error, :invalid_capture}`. The conversion covers the whole
+capture; it does not select or rename paths.
+
+The optional `:id` identifies the source chosen by the caller. Without it, the
+snapshot ID is the content digest. VFS revision tokens remain separate and are
+used for checked live edits. Conversion does not authorize or accept source,
+build a release, or synchronize later memory changes into a running service.
+
+`test/examples/capture_deploy_test.exs` captures a memory filesystem, applies
+checked live edits, and deploys the original capture to a real local Node.js
+service. A second captured version fails verification and blocks ordinary
+deployment. Explicit recovery deploys the original capture into a new release
+directory, after the memory storage process has stopped. The test checks
+source identity, content digest, file content, verification evidence, and the
+recovery link. Node.js process memory resets during service restart.
+
 ## Failure and recovery
 
 `apply/2` returns an operation ID immediately. Reapplying the same stored plan
@@ -172,8 +215,8 @@ isolation. Use trusted payloads, boot scripts, commands, and upgrade instruction
 The SDK does not require an external version-control system.
 
 Snapshot identity is distinct from content digest. A caller can retain its own
-BeamWeaver source ID. A later VFS adapter can create snapshots without adding a
-VFS runtime dependency. Captures support regular and executable files. Symlinks
+BeamWeaver source ID. `Snapshot.from_capture/2` converts VFS memory captures
+through the existing VFS dependency. Snapshots support regular and executable files. Symlinks
 and special files are refused; empty directories are not retained.
 
 Plans and operation records stay in controller memory. Target operation records
