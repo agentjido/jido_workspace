@@ -23,6 +23,7 @@ defmodule Jido.Workspace.SandboxTest do
     {:ok, sandbox} = Sandbox.open()
     assert :ok = Sandbox.destroy(sandbox)
     refute File.exists?(sandbox.root)
+    assert [] = Registry.lookup(Jido.Workspace.Sandbox.Registry, sandbox.id)
     assert {:error, :not_found} = Sandbox.attach(sandbox.id)
   end
 

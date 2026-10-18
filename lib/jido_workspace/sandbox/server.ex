@@ -203,6 +203,7 @@ defmodule Jido.Workspace.Sandbox.Server do
   def handle_call(:destroy, _, state) do
     with :ok <- cleanup(state),
          {:ok, _} <- File.rm_rf(state.sandbox.root) do
+      Registry.unregister(Jido.Workspace.Sandbox.Registry, state.sandbox.id)
       {:stop, :normal, :ok, %{state | services: %{}}}
     else
       error -> {:reply, error, state}
