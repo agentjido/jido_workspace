@@ -2,6 +2,7 @@ defmodule Jido.Workspace.Sandbox.Files do
   @moduledoc false
 
   # Local provider implementation. All roots come from the Sandbox controller.
+  @doc "Checks whether file names on the root filesystem are case sensitive."
   def case_sensitive?(root) do
     name = ".jido-case-" <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
     path = Path.join(root, name)
@@ -14,6 +15,7 @@ defmodule Jido.Workspace.Sandbox.Files do
     end
   end
 
+  @doc "Resolves a path within the root and refuses symbolic link traversal."
   def path(root, relative) when is_binary(relative) do
     parts = Path.split(relative)
 
@@ -61,14 +63,17 @@ defmodule Jido.Workspace.Sandbox.Files do
     end
   end
 
+  @doc "Reads bytes from a checked path."
   def read(root, relative), do: with({:ok, path} <- path(root, relative), do: File.read(path))
 
+  @doc "Creates a directory at a checked path."
   def mkdir(root, relative, parents) do
     with {:ok, path} <- path(root, relative) do
       if parents, do: File.mkdir_p(path), else: File.mkdir(path)
     end
   end
 
+  @doc "Writes bytes and a supported file mode at a checked path."
   def write(root, relative, bytes, mode) when mode in [0o644, 0o755] do
     with {:ok, path} <- path(root, relative),
          :ok <- File.mkdir_p(Path.dirname(path)),
@@ -78,12 +83,14 @@ defmodule Jido.Workspace.Sandbox.Files do
 
   def write(_, _, _, _), do: {:error, :invalid_mode}
 
+  @doc "Reads a link after checking its parent directory and leaf name."
   def read_link(root, relative) do
     with {:ok, parent} <- path(root, Path.dirname(relative)),
          :ok <- valid_leaf(relative),
          do: File.read_link(Path.join(parent, Path.basename(relative)))
   end
 
+  @doc "Replaces a checked link with a relative destination through an atomic rename."
   def replace_link(root, relative, destination, nonce) do
     with :ok <- valid_leaf(relative),
          :ok <- valid_leaf(destination),
@@ -108,6 +115,7 @@ defmodule Jido.Workspace.Sandbox.Files do
          not String.contains?(relative, <<0>>), do: :ok, else: {:error, :invalid_path}
   end
 
+  @doc "Captures file entries below a checked directory. Links are optional."
   def capture(root, relative, links \\ false) do
     with {:ok, directory} <- path(root, relative), do: tree(directory, "", %{}, links)
   end
@@ -126,10 +134,7 @@ defmodule Jido.Workspace.Sandbox.Files do
                 tree(root, relative, acc, links)
 
               :regular ->
-                with {:ok, bytes} <- File.read(full) do
-                  mode = if Bitwise.band(stat.mode, 0o111) != 0, do: 0o755, else: 0o644
-                  {:ok, Map.put(acc, relative, %{bytes: bytes, mode: mode})}
-                end
+                read_file(full, relative, stat, acc)
 
               :symlink when links ->
                 with {:ok, target} <- File.read_link(full),
@@ -148,6 +153,14 @@ defmodule Jido.Workspace.Sandbox.Files do
     end
   end
 
+  defp read_file(full, relative, stat, entries) do
+    with {:ok, bytes} <- File.read(full) do
+      mode = if Bitwise.band(stat.mode, 0o111) != 0, do: 0o755, else: 0o644
+      {:ok, Map.put(entries, relative, %{bytes: bytes, mode: mode})}
+    end
+  end
+
+  @doc "Checks captured content or only the supplied tracked entries."
   def verify(root, relative, entries, tracked) do
     if tracked do
       Enum.reduce_while(entries, :ok, fn {name, entry}, :ok ->

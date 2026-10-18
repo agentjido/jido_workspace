@@ -11,6 +11,7 @@ defmodule Jido.Workspace.Deploy.OTP do
   alias Jido.Workspace.Deploy.{Artifact, Snapshot, Target}
   alias Jido.Workspace.Sandbox
 
+  @doc "Projects an OTP release into the sandbox and starts its target runtime."
   def start(sandbox, name, %Artifact{kind: :otp} = artifact, opts \\ []) do
     path = Keyword.get(opts, :path, name)
 
@@ -86,6 +87,7 @@ defmodule Jido.Workspace.Deploy.OTP do
     end
   end
 
+  @doc "Reads release identity and runtime state from the target release handler."
   def inspect(target) do
     with {:ok, observation} <- call(target, :jido_workspace_deploy_target, :identity, []) do
       {:ok, %{identity: Map.take(observation, [:generation, :release]), runtime: observation}}
@@ -119,6 +121,7 @@ defmodule Jido.Workspace.Deploy.OTP do
     end
   end
 
+  @doc "Stages and installs an OTP release. The caller receives progress evidence."
   def execute(target, plan, notify) do
     with :ok <- stage(target, plan.artifact, plan.id),
          _ <- notify.(:stage, :verified) do
@@ -203,6 +206,7 @@ defmodule Jido.Workspace.Deploy.OTP do
     end
   end
 
+  @doc "Calls a function on the target through the sandbox control channel."
   def call(target, module, function, args),
     do: Sandbox.call(target.sandbox, target.service, module, function, args, 10_000)
 

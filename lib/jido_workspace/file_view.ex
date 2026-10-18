@@ -10,6 +10,7 @@ defmodule Jido.Workspace.FileView do
 
   @type t :: %__MODULE__{kind: atom(), owner: term(), path: term(), revision: term()}
 
+  @doc "Checks an expected file view against the current observation. The atom :current accepts it."
   def check(:current, %__MODULE__{}), do: :ok
 
   def check(%__MODULE__{revision: :unavailable}, _), do: {:error, :unversioned_file_view}
@@ -20,6 +21,7 @@ defmodule Jido.Workspace.FileView do
 
   def check(_, _), do: {:error, :invalid_file_view}
 
+  @doc "Computes a stable SHA-256 digest for file entries."
   def digest(entries) do
     entries
     |> Enum.sort()

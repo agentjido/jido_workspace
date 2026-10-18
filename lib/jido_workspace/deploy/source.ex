@@ -3,6 +3,7 @@ defmodule Jido.Workspace.Deploy.Source do
   alias Jido.Workspace.Deploy.{Recipe, Snapshot}
   alias Jido.Workspace.Sandbox
 
+  @doc "Reads the active source link and service state."
   def inspect(target) do
     with {:ok, _} <- Sandbox.location(target.sandbox, target.path) do
       current =
@@ -23,6 +24,7 @@ defmodule Jido.Workspace.Deploy.Source do
     end
   end
 
+  @doc "Prepares the source payload, switches the active link, and runs the recipe checks."
   def execute(target, plan, notify) do
     recipe = plan.recipe || %Recipe{}
     relative = Path.join([target.path, "releases", plan.id])

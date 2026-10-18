@@ -2,6 +2,7 @@ defmodule Jido.Workspace.Sandbox.OTP do
   @moduledoc false
   alias Jido.Workspace.Sandbox.Files
 
+  @doc "Checks an OTP release layout and creates release metadata when initialize is true."
   def prepare(base, relative, version, initialize) do
     with true <- is_binary(version) and Regex.match?(~r/\A[A-Za-z0-9][A-Za-z0-9._-]*\z/, version),
          {:ok, root} <- Files.path(base, relative),
@@ -26,7 +27,7 @@ defmodule Jido.Workspace.Sandbox.OTP do
   end
 
   defp boot_args(root, version) do
-    ebin = :code.which(:jido_workspace_deploy_target) |> List.to_string() |> Path.dirname()
+    ebin = Application.app_dir(:jido_workspace, "ebin")
 
     [
       "+S",

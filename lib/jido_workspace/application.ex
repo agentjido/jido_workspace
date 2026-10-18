@@ -2,6 +2,7 @@ defmodule Jido.Workspace.Application do
   @moduledoc false
   use Application
 
+  @doc "Starts the Workspace controller supervisors and registries."
   def start(_, _) do
     Supervisor.start_link(
       [

@@ -5,6 +5,10 @@ defmodule Jido.Workspace.Deploy.Recipe do
   """
   defstruct prepare: [], service: nil, verify: nil
 
+  @type command :: {String.t(), [String.t()]} | {String.t(), [String.t()], keyword()}
+  @type t :: %__MODULE__{prepare: [command()], service: map() | nil, verify: command() | nil}
+
+  @doc "Checks the command tuples and optional service fields. A nil recipe is permitted."
   def valid?(nil), do: true
 
   def valid?(%__MODULE__{} = recipe) do

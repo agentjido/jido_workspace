@@ -1,7 +1,7 @@
 defmodule Jido.Workspace.BoundariesTest do
   use ExUnit.Case, async: false
   alias Jido.Workspace
-  alias Jido.Workspace.{Sandbox, Deploy}
+  alias Jido.Workspace.{Deploy, Sandbox}
   alias Jido.Workspace.Deploy.{Artifact, Snapshot}
 
   test "path aliases and concurrent connects use one deployment controller" do

@@ -1,9 +1,9 @@
 defmodule Jido.Workspace.Sandbox.Server do
   @moduledoc false
   use GenServer, restart: :temporary, shutdown: 60_000
+  alias Jido.Workspace.FileView
   alias Jido.Workspace.Sandbox
   alias Jido.Workspace.Sandbox.{Files, OTP}
-  alias Jido.Workspace.FileView
 
   def start_link(args), do: GenServer.start_link(__MODULE__, args)
 

@@ -12,9 +12,22 @@ Thank you for your interest in contributing to Jido Workspace!
 
 Before submitting a PR, ensure:
 
-- `mix quality` passes (format, compile warnings, credo, dialyzer)
-- `mix coveralls` shows ≥90% coverage
+- `mix quality` passes (format, compile warnings, strict Credo, Dialyzer, and Doctor).
+- `mix test.coverage` reports at least 90% coverage.
 - All tests pass
+
+`mix test` runs the unit tests. `mix test.integration` runs each integration
+example in a separate BEAM instance. `mix test.coverage` preserves this separation
+and combines the example coverage with the unit test coverage. The report is
+`cover/excoveralls.json`. Each run removes the old example coverage data first.
+
+Coverage from services that run in a separate BEAM instance is not collected by
+the controller report. Tests that require unavailable services remain skipped.
+Read the test counts and exclusions with the coverage result.
+
+Use a matching Elixir and OTP build for Dialyzer. The shared CI quality job uses
+Elixir 1.20 and OTP 29. A build compiled for a different OTP version can cause
+errors when Dialyzer reads protocol debug data.
 
 ## Commit Messages
 

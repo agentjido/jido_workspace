@@ -17,6 +17,7 @@ defmodule Jido.Workspace.Sandbox do
           deployment: term()
         }
 
+  @doc "Creates a sandbox with an owned directory, backend, and fixed policy."
   def open(opts \\ []) do
     with :ok <- Jido.Workspace.Policy.validate(Keyword.get(opts, :policy, :full_access)),
          {:ok, backend, backend_opts} <- Jido.Workspace.Sandbox.Backend.resolve(opts) do
@@ -38,6 +39,7 @@ defmodule Jido.Workspace.Sandbox do
     end
   end
 
+  @doc "Gets a handle to a live sandbox by its registered ID."
   def attach(id) do
     case Registry.lookup(Jido.Workspace.Sandbox.Registry, id) do
       [{pid, _root}] -> request(%__MODULE__{id: id, pid: pid, root: ""}, :handle)
@@ -45,6 +47,7 @@ defmodule Jido.Workspace.Sandbox do
     end
   end
 
+  @doc "Reads the capabilities reported by the sandbox backend."
   def capabilities(sandbox), do: request(sandbox, :capabilities)
 
   @doc false
@@ -54,13 +57,20 @@ defmodule Jido.Workspace.Sandbox do
     end
   end
 
+  @doc "Checks an action against the policy stored by the controller."
   def authorize(sandbox, action), do: request(sandbox, {:authorize, action})
 
+  @doc "Reads sandbox identity and service records."
   def info(sandbox), do: request(sandbox, :info)
+  @doc "Closes a handle without stopping services or deleting files."
   def close(%__MODULE__{}), do: :ok
+  @doc "Stops owned services and removes the sandbox directory."
   def destroy(sandbox), do: request(sandbox, :destroy)
+  @doc "Starts a service after policy, capability, and file checks pass."
   def start_service(sandbox, spec), do: request(sandbox, {:start_service, spec})
+  @doc "Stops the service identified by its ID."
   def stop_service(sandbox, id), do: request(sandbox, {:stop_service, id})
+  @doc "Reads a service status and its recorded result."
   def service_status(sandbox, id), do: request(sandbox, {:service_status, id})
 
   @doc "Calls a BEAM service through its private standard-input control channel."
@@ -121,24 +131,33 @@ defmodule Jido.Workspace.Sandbox do
 
   @doc "Resolves a provider path from the controller-owned root."
   def path(sandbox, relative), do: files(sandbox, :path, [relative])
+  @doc "Gets the canonical target identity and provider location for a relative path."
   def location(sandbox, relative), do: request(sandbox, {:location, relative})
+  @doc "Reads a file through the sandbox path and policy checks."
   def read(sandbox, relative), do: files(sandbox, :read, [relative])
+  @doc "Creates a directory. Parent directories are created when parents is true."
   def mkdir(sandbox, relative, parents \\ true), do: files(sandbox, :mkdir, [relative, parents])
+  @doc "Reads a symbolic link without following its final path component."
   def read_link(sandbox, relative), do: files(sandbox, :read_link, [relative])
 
+  @doc "Replaces a symbolic link through a temporary link and an atomic rename."
   def replace_link(sandbox, relative, destination, nonce),
     do: files(sandbox, :replace_link, [relative, destination, nonce])
 
+  @doc "Checks file bytes and modes. A tracked check permits additional files."
   def verify_files(sandbox, relative, entries, tracked \\ false),
     do: files(sandbox, :verify, [relative, entries, tracked])
 
+  @doc "Checks the OTP release layout and prepares release metadata when requested."
   def release_files(sandbox, relative, version, initialize \\ false),
     do: request(sandbox, {:release_files, relative, version, initialize})
 
+  @doc "Captures the source identity and revision for a relative directory."
   def file_view(sandbox, relative \\ "."), do: request(sandbox, {:file_view, relative})
 
   defp files(sandbox, operation, args), do: request(sandbox, {:files, operation, args})
 
+  @doc "Writes file bytes and applies a regular or executable file mode."
   def write(sandbox, relative, bytes, mode \\ 0o644) when mode in [0o644, 0o755] do
     request(sandbox, {:write, relative, bytes, mode})
   end

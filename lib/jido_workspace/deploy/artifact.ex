@@ -3,6 +3,13 @@ defmodule Jido.Workspace.Deploy.Artifact do
   @enforce_keys [:version, :kind, :snapshot]
   defstruct [:version, :kind, :snapshot]
 
+  @type t :: %__MODULE__{
+          version: String.t(),
+          kind: :otp | :source,
+          snapshot: Jido.Workspace.Deploy.Snapshot.t()
+        }
+
+  @doc "Creates an artifact with a valid version, payload kind, and snapshot."
   def new(kind, version, snapshot) when kind in [:otp, :source] do
     if is_binary(version) and Regex.match?(~r/\A[A-Za-z0-9][A-Za-z0-9._-]*\z/, version) and
          Jido.Workspace.Deploy.Snapshot.valid?(snapshot) do
@@ -14,6 +21,7 @@ defmodule Jido.Workspace.Deploy.Artifact do
 
   def new(_, _, _), do: {:error, :invalid_artifact}
 
+  @doc "Checks the artifact fields and the snapshot content digest."
   def valid?(%__MODULE__{} = artifact) do
     match?({:ok, _}, new(artifact.kind, artifact.version, artifact.snapshot))
   end

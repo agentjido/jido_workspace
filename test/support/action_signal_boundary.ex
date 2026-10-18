@@ -87,6 +87,7 @@ defmodule Jido.Workspace.TestSupport.ActionBoundary do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Write do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
@@ -102,8 +103,9 @@ defmodule Jido.Workspace.TestSupport.Actions.Write do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Mkdir do
-  alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
+  @moduledoc false
   alias Jido.Workspace
+  alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
     name: "workspace_file_test_mkdir",
@@ -117,8 +119,9 @@ defmodule Jido.Workspace.TestSupport.Actions.Mkdir do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Delete do
-  alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
+  @moduledoc false
   alias Jido.Workspace
+  alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
     name: "workspace_file_test_delete",
@@ -132,8 +135,9 @@ defmodule Jido.Workspace.TestSupport.Actions.Delete do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Close do
-  alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
+  @moduledoc false
   alias Jido.Workspace
+  alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_file_test_close", schema: Boundary.schema()
 
   def run(params, context) do
@@ -144,6 +148,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Close do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Run do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
@@ -182,6 +187,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Run do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Info do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_info", schema: Boundary.schema()
 
@@ -194,6 +200,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Info do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.List do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_list", schema: Boundary.schema(%{path: Zoi.string()})
 
@@ -206,6 +213,7 @@ defmodule Jido.Workspace.TestSupport.Actions.List do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.FileView do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_file_view", schema: Boundary.schema()
 
@@ -218,6 +226,7 @@ defmodule Jido.Workspace.TestSupport.Actions.FileView do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.StartSession do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_start_session", schema: Boundary.schema()
 
@@ -230,6 +239,7 @@ defmodule Jido.Workspace.TestSupport.Actions.StartSession do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.StopSession do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_stop_session", schema: Boundary.schema()
 
@@ -241,6 +251,7 @@ defmodule Jido.Workspace.TestSupport.Actions.StopSession do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Filesystem do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_filesystem", schema: Boundary.schema()
 
@@ -253,6 +264,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Filesystem do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Shell do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_shell", schema: Boundary.schema()
 
@@ -265,6 +277,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Shell do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Read do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_read", schema: Boundary.schema(%{path: Zoi.string()})
 
@@ -277,6 +290,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Read do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Capture do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
   use Jido.Action, name: "workspace_test_capture", schema: Boundary.schema()
 
@@ -294,6 +308,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Capture do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Replace do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
@@ -314,6 +329,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Replace do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Exec do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
@@ -331,6 +347,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Exec do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Prepare do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
@@ -349,6 +366,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Prepare do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Apply do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,
@@ -365,6 +383,7 @@ defmodule Jido.Workspace.TestSupport.Actions.Apply do
 end
 
 defmodule Jido.Workspace.TestSupport.Actions.Await do
+  @moduledoc false
   alias Jido.Workspace.TestSupport.ActionBoundary, as: Boundary
 
   use Jido.Action,

@@ -37,9 +37,11 @@ defmodule Jido.Workspace.MixProject do
   def cli do
     [
       preferred_envs: [
+        "test.coverage": :test,
         coveralls: :test,
         "coveralls.github": :test,
-        "coveralls.html": :test
+        "coveralls.html": :test,
+        "coveralls.json": :test
       ]
     ]
   end
@@ -92,11 +94,12 @@ defmodule Jido.Workspace.MixProject do
     [
       setup: ["deps.get", "git_hooks.install"],
       "test.integration": &integration/1,
+      "test.coverage": &coverage/1,
       q: ["quality"],
       quality: [
         "format --check-formatted",
         "compile --warnings-as-errors",
-        "credo --min-priority higher",
+        "credo --strict",
         "dialyzer",
         "doctor --raise"
       ]
@@ -158,5 +161,32 @@ defmodule Jido.Workspace.MixProject do
 
       if status != 0, do: Mix.raise("Integration example failed: #{file}")
     end
+  end
+
+  defp coverage(args) do
+    output = "cover/examples"
+    File.rm_rf!(output)
+    File.mkdir_p!(output)
+
+    for {file, index} <- Enum.with_index(Path.wildcard("test/examples/**/*_test.exs")) do
+      coverage_run(
+        [
+          "coveralls.json",
+          file,
+          "--include",
+          "integration",
+          "--export-coverage",
+          "examples/#{index}"
+        ] ++
+          args
+      )
+    end
+
+    coverage_run(["coveralls.json", "--import-cover", output] ++ args)
+  end
+
+  defp coverage_run(args) do
+    {_, status} = System.cmd("mix", args, into: IO.stream(), env: [{"MIX_ENV", "test"}])
+    if status != 0, do: Mix.raise("Coverage test run failed")
   end
 end

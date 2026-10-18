@@ -5,6 +5,7 @@ defmodule Jido.Workspace.Command do
 
   # Each invocation has a separate subscriber mailbox and a fixed deadline.
   # Output limits apply while chunks arrive, before they enter the result.
+  @doc "Runs one command with a private event subscriber, deadline, and output limit."
   def run(ws, id, pid, view, command, opts) do
     started = System.monotonic_time(:millisecond)
     timeout = Keyword.get(opts, :timeout_ms, 30_000)

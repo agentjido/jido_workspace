@@ -6,7 +6,7 @@ defmodule Jido.Workspace.Sandbox.Backend do
   creation and cleanup. A successful stop must stop the owned execution resource.
   See API_SPEC.md for capability, error, and ownership contracts.
   """
-  alias Jido.Workspace.Sandbox.Backends.{Local, Docker}
+  alias Jido.Workspace.Sandbox.Backends.{Docker, Local}
 
   @type state :: term()
   @type service :: map()

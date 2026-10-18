@@ -7,6 +7,10 @@ defmodule Jido.Workspace.Deploy.Snapshot do
   @enforce_keys [:id, :digest, :entries]
   defstruct [:id, :digest, :entries]
 
+  @type entry :: %{bytes: binary(), mode: 0o644 | 0o755}
+  @type t :: %__MODULE__{id: term(), digest: String.t(), entries: %{String.t() => entry()}}
+
+  @doc "Creates a snapshot from relative paths, bytes, and file modes. Conflicting paths are refused."
   def new(entries, opts \\ []) when is_map(entries) do
     valid =
       Enum.all?(entries, fn
@@ -34,10 +38,12 @@ defmodule Jido.Workspace.Deploy.Snapshot do
     end
   end
 
+  @doc "Captures regular files from a directory. Symbolic links and special files are refused."
   def from_directory(directory, opts \\ []) do
     with {:ok, entries} <- read_tree(Path.expand(directory), "", %{}), do: new(entries, opts)
   end
 
+  @doc "Checks snapshot paths, modes, and content digest."
   def valid?(%__MODULE__{entries: entries} = snapshot) when is_map(entries) do
     case new(snapshot.entries, id: snapshot.id) do
       {:ok, rebuilt} -> rebuilt.digest == snapshot.digest
@@ -47,6 +53,7 @@ defmodule Jido.Workspace.Deploy.Snapshot do
 
   def valid?(_), do: false
 
+  @doc "Writes a valid snapshot into a new sandbox directory and checks the resulting files."
   def project(%__MODULE__{} = snapshot, sandbox, relative) do
     with :ok <- Jido.Workspace.Sandbox.authorize(sandbox, :write),
          true <- valid?(snapshot),
@@ -74,6 +81,7 @@ defmodule Jido.Workspace.Deploy.Snapshot do
     end
   end
 
+  @doc "Checks that a directory has exactly the snapshot content and file modes."
   def verify(snapshot, directory) do
     case from_directory(directory) do
       {:ok, %{digest: digest}} when digest == snapshot.digest -> :ok
@@ -89,6 +97,7 @@ defmodule Jido.Workspace.Deploy.Snapshot do
   def verify_tracked(snapshot, sandbox, relative),
     do: Jido.Workspace.Sandbox.verify_files(sandbox, relative, snapshot.entries, true)
 
+  @doc "Checks that a path is relative and has no empty, current, or parent components."
   def valid_path?(path) when is_binary(path) do
     path != "" and Path.type(path) == :relative and not String.contains?(path, ["\\", <<0>>]) and
       Enum.all?(String.split(path, "/"), &(&1 not in ["", ".", ".."]))
@@ -117,10 +126,7 @@ defmodule Jido.Workspace.Deploy.Snapshot do
                 read_tree(root, path, acc)
 
               :regular ->
-                with {:ok, bytes} <- File.read(Path.join(root, path)) do
-                  mode = if Bitwise.band(stat.mode, 0o111) != 0, do: 0o755, else: 0o644
-                  {:ok, Map.put(acc, path, %{bytes: bytes, mode: mode})}
-                end
+                read_file(root, path, stat, acc)
 
               _ ->
                 {:error, {:unsupported_file, path}}
@@ -132,6 +138,13 @@ defmodule Jido.Workspace.Deploy.Snapshot do
           error -> {:halt, error}
         end
       end)
+    end
+  end
+
+  defp read_file(root, path, stat, entries) do
+    with {:ok, bytes} <- File.read(Path.join(root, path)) do
+      mode = if Bitwise.band(stat.mode, 0o111) != 0, do: 0o755, else: 0o644
+      {:ok, Map.put(entries, path, %{bytes: bytes, mode: mode})}
     end
   end
 end

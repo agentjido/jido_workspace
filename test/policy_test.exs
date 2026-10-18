@@ -1,7 +1,7 @@
 defmodule Jido.Workspace.PolicyTest do
   use ExUnit.Case, async: false
   alias Jido.Workspace
-  alias Jido.Workspace.{Sandbox, Deploy, Policy}
+  alias Jido.Workspace.{Deploy, Policy, Sandbox}
   alias Jido.Workspace.Deploy.{Artifact, Snapshot, Target}
 
   test "profiles refuse unknown permissions and profiles" do

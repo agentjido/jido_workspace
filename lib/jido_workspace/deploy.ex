@@ -8,6 +8,7 @@ defmodule Jido.Workspace.Deploy do
   """
   alias Jido.Workspace.Deploy.{Artifact, Server, Target}
 
+  @doc "Connects to the controller for a target. Conflicting target definitions are refused."
   def connect(%Target{} = target) do
     with {:ok, location} <- Jido.Workspace.Sandbox.location(target.sandbox, target.path) do
       canonical = %{target | id: location.id, path: location.path, sandbox: location.sandbox}
@@ -30,6 +31,7 @@ defmodule Jido.Workspace.Deploy do
     end
   end
 
+  @doc "Creates a source target and its shared directory in the sandbox."
   def source_target(sandbox, name, opts \\ []) do
     path = Keyword.get(opts, :path, name)
 
@@ -50,12 +52,16 @@ defmodule Jido.Workspace.Deploy do
     end
   end
 
+  @doc "Reads the current target identity and runtime state."
   def inspect(session), do: GenServer.call(session, :inspect)
 
+  @doc "Creates a plan bound to the current target observation. It does not apply the plan."
   def prepare(session, %Artifact{} = artifact, opts \\ []),
     do: GenServer.call(session, {:prepare, artifact, opts}, 15_000)
 
+  @doc "Starts the supplied plan after its target preconditions pass."
   def apply(session, plan), do: GenServer.call(session, {:apply, plan})
+  @doc "Reads the recorded status and evidence for an operation."
   def status(session, id), do: GenServer.call(session, {:status, id})
 
   @doc "Prepares a new explicit transition after a failed or successful deployment."

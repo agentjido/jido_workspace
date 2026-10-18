@@ -40,7 +40,7 @@ defmodule Jido.Workspace.SandboxTest do
   end
 
   test "invalid backend options fail without retaining an owned root" do
-    alias Jido.Workspace.Sandbox.Backends.{Local, Docker}
+    alias Jido.Workspace.Sandbox.Backends.{Docker, Local}
 
     root =
       Path.join(System.tmp_dir!(), "jido-invalid-backend-#{System.unique_integer([:positive])}")

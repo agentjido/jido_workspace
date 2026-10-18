@@ -4,6 +4,7 @@
 
 # Coverage
 /cover/
+*.coverdata
 /cov/
 
 # Dialyzer
