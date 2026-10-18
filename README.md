@@ -1,123 +1,211 @@
-# Jido.Workspace
+# Jido Workspace
 
-[![Hex.pm](https://img.shields.io/hexpm/v/jido_workspace.svg)](https://hex.pm/packages/jido_workspace)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/jido_workspace/)
-[![CI](https://github.com/agentjido/jido_workspace/actions/workflows/ci.yml/badge.svg)](https://github.com/agentjido/jido_workspace/actions/workflows/ci.yml)
-[![License](https://img.shields.io/hexpm/l/jido_workspace.svg)](https://github.com/agentjido/jido_workspace/blob/main/LICENSE)
-[![Website](https://img.shields.io/badge/website-jido.run-0f172a.svg)](https://jido.run)
-[![Ecosystem](https://img.shields.io/badge/ecosystem-jido.run-0ea5e9.svg)](https://jido.run/ecosystem)
-[![Discord](https://img.shields.io/badge/discord-join-5865F2.svg?logo=discord&logoColor=white)](https://jido.run/discord)
+A local package for agent working files, execution environments, deployment,
+and policy. VFS and Shell remain separate packages. Source history remains in
+BeamWeaver.
 
-Unified artifact workspace for agent sessions, built on `jido_shell` + `jido_vfs`.
+See [the API proposal](API_SPEC.md) for contracts, Action and Signal boundaries,
+and the migration plan. This package is unreleased. API changes apply directly
+in `Jido.Workspace`; there is no separate compatibility facade.
 
-## Package Boundary
-
-`jido_workspace` is a strict workspace library. It owns:
-
-- Workspace state and artifact lifecycle
-- Optional shell-session convenience bound to workspace id
-- Snapshot/restore of workspace artifacts
-
-It does **not** own:
-
-- Provider orchestration
-- Harness runtime policy/bootstrap
-- Sprite workflow orchestration
-
-## Installation
-
-Add `jido_workspace` to your list of dependencies in `mix.exs`:
+## File API
 
 ```elixir
-def deps do
-  [
-    {:jido_workspace, "~> 0.1.0"}
-  ]
-end
+alias Jido.Workspace
+
+{:ok, ws} = Workspace.open(policy: :workspace_write)
+:ok = Workspace.mkdir(ws, "/src")
+:ok = Workspace.write(ws, "/src/input.txt", "hello")
+{:ok, "hello"} = Workspace.read(ws, "/src/input.txt")
+:ok = Workspace.delete(ws, "/src/input.txt")
+:ok = Workspace.close(ws)
+:ok = Workspace.close(ws)
 ```
 
-## Quick Start
+Keep the same handle after file changes. The controller owns mutable state and
+checks policy. All Workspace methods return structured errors
+with a code, operation, resource ID, and bounded cause. Paths must be absolute
+UTF-8 paths without NUL or parent traversal. Writes accept iodata. The caller
+owns the Workspace unless the host sets `owner:`. Open resources before passing
+them to short-lived Action tasks.
+
+`list` returns Entry records with absolute paths. `info` returns current policy,
+owner, and session status. `capture` returns immutable content and a revision.
+Use `replace(ws, capture, expected: revision)` for checked replacement.
+`run` returns an Execution record. Keep the same handle; it has no cached
+session or command fields. `new`, `snapshot`, `restore`, and `execute` are removed.
+
+`test/examples/workspace_file_api_test.exs` and `workspace_contract_test.exs`
+run file, capture, command, session, and policy checks directly, through
+`Jido.Exec`, and through a real AgentServer with
+Jido Signals. Its Actions and Signal adapter remain test-only. No model is used.
+
+## Internal boundaries
+
+| Module | Responsibility |
+| --- | --- |
+| `Jido.Workspace` | Working-file and Shell API |
+| `Jido.Workspace.Lifetime` | Ownership of mounted storage and Shell sessions |
+| `Jido.Workspace.Sandbox` | Local processes, Docker/gVisor containers, files, and retained services |
+| `Jido.Workspace.Deploy` | Targets, preparation plans, execution records, and recovery |
+| `Jido.Workspace.Deploy.OTP` | OTP release handling and explicit state migration |
+| `Jido.Workspace.Deploy.Source` | Source projection, activation, and service restart |
+| `Jido.Workspace.Policy` | Permission checks used by Workspace controllers |
+| `Jido.VFS` dependency | Storage adapters and atomic file captures |
+| `Jido.Shell` dependency | Shell sessions and command execution |
+
+All Elixir source is under `lib/jido_workspace/`, except the public facade at
+`lib/jido_workspace.ex`. The target-side OTP control module is in `src/`.
+Sandbox and Deploy retain separate registries, supervisors, and tests.
+They share one OTP application, `:jido_workspace`.
+
+An in-memory workspace and an OS environment are explicit, separate resources.
+Opening one does not open the other. Deploy takes an Sandbox handle.
+A deployment `Snapshot` is a file payload with a digest and a caller-supplied
+source ID. It does not own branches, commits, merges, or source history.
+
+## Target and file boundaries
+
+Deploy resolves every target through Sandbox before it connects. Target identity
+uses the controller-owned Sandbox ID and a canonical relative path. Dot paths,
+trailing separators, and case aliases on a case-insensitive filesystem cannot
+create a second deployment controller. Symlink traversal is refused. Concurrent
+connections use the same registry key. This is one-controller protection within
+one Workspace application. It is not a distributed deployment lock.
+
+Deploy sends target reads, writes, directory creation, file checks, link
+activation, and OTP release-file setup through Sandbox. The local provider owns
+those OS calls. `Snapshot.from_directory/2` and `Snapshot.verify/2` remain explicit
+host-side import and check helpers. They are not used to inspect deployed files.
+No remote provider is added by this change.
+
+## Command file views
+
+A `Jido.Workspace.FileView` names the file source, owner, path, and observed
+revision. Workspace views describe mounted VFS files. Sandbox views describe a
+directory in that environment. The two kinds cannot be substituted.
 
 ```elixir
-# Create a new workspace (in-memory VFS mounted at /)
-workspace = Jido.Workspace.new()
+{:ok, workspace} = Jido.Workspace.open()
+:ok = Jido.Workspace.write(workspace, "/input", "draft")
+{:ok, view} = Jido.Workspace.file_view(workspace)
+{:ok, record} = Jido.Workspace.run(workspace, "cat /input", files: view)
+"draft" = record.output
+^view = record.files
+:ok = Jido.Workspace.close(workspace)
 
-# Work with artifacts
-{:ok, workspace} = Jido.Workspace.write(workspace, "/hello.txt", "Hello, World!")
-{:ok, "Hello, World!"} = Jido.Workspace.read(workspace, "/hello.txt")
-{:ok, ["hello.txt"]} = Jido.Workspace.list(workspace, "/")
-
-# Snapshot and restore
-{:ok, capture, workspace} = Jido.Workspace.snapshot(workspace)
-{:ok, workspace} = Jido.Workspace.delete(workspace, "/hello.txt")
-{:ok, workspace} = Jido.Workspace.restore(workspace, capture)
-
-# Run a shell command in the workspace
-{:ok, output, workspace} = Jido.Workspace.run(workspace, "pwd")
-
-# Cleanup
-{:ok, workspace} = Jido.Workspace.close(workspace)
+{:ok, sandbox} = Jido.Workspace.Sandbox.open()
+:ok = Jido.Workspace.Sandbox.write(sandbox, "input", "draft")
+{:ok, view} = Jido.Workspace.Sandbox.file_view(sandbox)
+{:ok, result} = Jido.Workspace.Sandbox.exec(sandbox, "/bin/cat", ["input"], files: view)
+^view = result.files
+:ok = Jido.Workspace.Sandbox.destroy(sandbox)
 ```
 
-## Why Jido.Workspace
+The `:files` option accepts a view or `:current` (the default).
+A stale view is refused before the command or service starts. Sandbox services
+record the input view in their status. Deploy command evidence includes these
+records. Sandbox revisions hash file contents and executable modes; directory
+names and symlink destinations are also included. Links are recorded without
+following them. This is a full directory scan for each command start.
 
-- Unifies artifact lifecycle for an agent session
-- Uses `Jido.Shell.VFS` for mount/routing
-- Uses `Jido.VFS` adapter ecosystem for storage backends
-- Provides a single state struct for files + session context
+`Workspace.run/3` returns `{:ok, %Execution{}}`, including `files` and
+`after_files`, combined `output`, `exit_status`, `status`, `truncated`, and
+`duration_ms`. Nonzero exits remain successful observations. Timeouts return
+status `:timed_out` and cancel the command. Options use `timeout_ms:` and
+`output_limit:`. A final file observation error stays in `after_files`.
 
-## Workspace vs Harness Exec
+VFS adapters that do not supply a capture revision, and workspaces with multiple
+mounts, report `revision: :unavailable`. A named view with that revision is
+refused with `:unversioned_file_view`. Commands can still use `files: :current`.
 
-- Use `Jido.Workspace` when you need app-level stateful workspace operations:
-: artifact files, snapshots, and optional shell command execution tied to that workspace.
-- Use `Jido.Harness.Exec.Workspace` when you need provider-runtime orchestration primitives:
-: provisioning/validation/bootstrap around coding-agent execution.
+These revisions are pre-start observations and checks. They do not lock files or
+make a command's file view immutable. Another process or a raw file handle can
+change files during execution. There is no automatic synchronization between
+memory files and Sandbox files. Use a projected, isolated tree when execution
+must use fixed content.
 
-## Documentation
+## Policy
 
-See [HexDocs](https://hexdocs.pm/jido_workspace) for full documentation.
+Set `policy:` when you open a workspace or an environment. The controller keeps
+this value for its lifetime. Handles and command options cannot change it.
 
-## License
+| Profile | Read and capture | File changes | Raw VFS or Shell handle | OS execution and deployment |
+| --- | --- | --- | --- | --- |
+| `:read_only` | Allow | Deny | Deny | Deny |
+| `:workspace_write` | Allow | Allow | Deny | Deny |
+| `:full_access` | Allow | Allow | Allow | Allow |
 
-Apache-2.0
-
-## Testing Paths
-
-- Core workspace suite: `mix test`
-- Full quality gate: `mix quality`
-- Keep scenario-heavy testing in `jido_workspace_scenarios`
-
-## Owned workspace lifecycle
+The default is `:full_access`. This keeps the current local access rules.
+A host that exposes tools to an agent must select the
+required profile explicitly.
 
 ```elixir
-{:ok, workspace} = Jido.Workspace.open(owner: self())
-{:ok, filesystem} = Jido.Workspace.filesystem(workspace)
-{:ok, session} = Jido.Workspace.shell(workspace)
-{:ok, saved, token} = Jido.Workspace.capture(workspace)
-{:ok, next_token} = Jido.VFS.apply_edits(filesystem, token, [{:write, "file", "new"}])
-{:ok, _} = Jido.Workspace.replace(workspace, next_token, saved)
-{:ok, _} = Jido.Workspace.close(workspace)
+{:ok, workspace} = Jido.Workspace.open(policy: :workspace_write)
+:ok = Jido.Workspace.write(workspace, "/notes.txt", "draft")
+{:error, %Jido.Workspace.Error{code: :policy_denied}} = Jido.Workspace.run(workspace, "pwd")
+:ok = Jido.Workspace.close(workspace)
+
+{:ok, environment} = Jido.Workspace.Sandbox.open(policy: :full_access)
+{:ok, result} = Jido.Workspace.Sandbox.exec(environment, "/bin/echo", ["ready"])
+"ready\n" = result.output
+:ok = Jido.Workspace.Sandbox.destroy(environment)
 ```
 
-Workspace owns storage and its optional shell session. Shell borrows that storage.
-Repeated `shell/1` calls return the same active session. Owner exit closes the
-session and storage. A storage process failure closes the environment; it does
-not restart an empty filesystem. Close is idempotent and stops active local
-commands before storage is released. Captures remain readable after close.
+Restricted profiles refuse all Shell execution. This prevents a command from
+bypassing file permissions. There is no command approval queue or policy editor
+in this spike. Resource close and environment destroy remain available for
+cleanup under every profile.
 
-### Snapshot API change
+These checks apply to supported Workspace calls from trusted host code. They are
+not a security boundary against code in the controller VM. Direct calls to VFS,
+Shell, File, or OTP can bypass them. A raw path is for trusted host integration.
+The local provider runs under the current OS user. It cannot restrict child
+process access to host files or the network. Use an isolated provider before
+running untrusted code.
 
-`snapshot/1` retains its three-element result tuple, but now returns an immutable
-`Jido.VFS.Capture` instead of a `snap-N` string. Pass that value to `restore/2`.
-There is no workspace snapshot map or counter. `restore/2` captures a current
-precondition and performs checked replacement; use `replace/3` to supply the
-expected token from an earlier read explicitly.
+## Migration from the local spikes
 
-Only the memory backend currently provides atomic capture and replacement.
-Local storage now returns `UnsupportedOperation` instead of copying a tree that
-can change during capture. Capture and replacement refuse multiple mounts.
-The attached shell session sees the owned root filesystem; additional mounts
-remain available through the legacy workspace file API, not that shell session.
+| Previous module | Current module |
+| --- | --- |
+| `Jido.Sandbox` | `Jido.Workspace.Sandbox` |
+| `Jido.Deploy` | `Jido.Workspace.Deploy` |
+| `Jido.Deploy.OTP` | `Jido.Workspace.Deploy.OTP` |
+| `Jido.Deploy.Source` | `Jido.Workspace.Deploy.Source` |
 
-BeamLoom version IDs, branches, merge policy, acceptance receipts, and deployment
-remain outside this package. Storage captures carry no branch history.
+The separate `:jido_sandbox` and `:jido_deploy` applications are removed. Their
+nested modules use the same namespace change. There are no compatibility aliases.
+File changes and close now return `:ok`. Update callers that expect a returned
+Workspace handle. File errors now use `Jido.Workspace.Error`.
+
+See [Sandbox](SANDBOX.md) for service ownership and provider limits.
+See [Deploy](DEPLOY.md) for OTP migration, failure recovery, and Node.js
+source deployment. OTP migration uses the current target state. A failed OTP
+migration can restart the target and lose in-memory state.
+
+## Checks
+
+Run these commands from this folder:
+
+```sh
+mise exec -- mix deps.get
+mise exec -- mix test
+mise exec -- mix test.integration
+mise exec -- mix format --check-formatted
+mise exec -- mix compile --warnings-as-errors
+```
+
+The integration alias starts a separate BEAM instance for each example file.
+The tests retain the Sandbox and Deploy scenarios and the existing Workspace
+scenarios. Policy tests check file changes, raw handles, execution, deployment,
+and modified environment handles.
+
+The existing Workspace implementation and tests came from
+`agentjido/jido_workspace` at `25f9fb6c65199c9180ffe6a83abdada4f565a508`.
+The Apache 2.0 license is included in [LICENSE](LICENSE).
+
+Command file views follow the active Shell backend. The built-in virtual backend
+uses the Workspace VFS revision. Other backends report `kind: :backend`, the
+backend module and session PID as owner, `path: :unknown`, and
+`revision: :unavailable`. A local VFS revision cannot prove the state of remote
+files. These backends accept `files: :current` and refuse pinned file views.

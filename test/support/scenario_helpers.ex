@@ -17,14 +17,14 @@ defmodule Jido.Workspace.TestSupport.ScenarioHelpers do
     :ok = File.mkdir_p!(output_root)
 
     workspace =
-      Workspace.new(
+      Workspace.open(
         id: workspace_id,
         adapter: Jido.VFS.Adapter.Local,
         adapter_opts: [prefix: output_root]
       )
 
     case workspace do
-      %Jido.Workspace.Workspace{} = ws ->
+      {:ok, %Jido.Workspace.Workspace{} = ws} ->
         put_workspace(ws)
 
         %{
@@ -75,9 +75,11 @@ defmodule Jido.Workspace.TestSupport.ScenarioHelpers do
     end
   end
 
-  @spec summary_json(String.t(), String.t(), String.t(), [{String.t() | atom(), any()}]) :: String.t()
+  @spec summary_json(String.t(), String.t(), String.t(), [{String.t() | atom(), any()}]) ::
+          String.t()
   def summary_json(scenario, status, workspace_id, extra_fields \\ [])
-      when is_binary(scenario) and is_binary(status) and is_binary(workspace_id) and is_list(extra_fields) do
+      when is_binary(scenario) and is_binary(status) and is_binary(workspace_id) and
+             is_list(extra_fields) do
     fields =
       [
         {"scenario", scenario},

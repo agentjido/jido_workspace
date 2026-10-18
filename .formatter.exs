@@ -1,7 +1,1 @@
-[
-  inputs: [
-    "{mix,.formatter,.credo}.exs",
-    "{config,lib,test}/**/*.{ex,exs}"
-  ],
-  line_length: 120
-]
+[inputs: ["mix.exs", "{lib,test}/**/*.{ex,exs}"]]
