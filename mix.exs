@@ -183,10 +183,16 @@ defmodule Jido.Workspace.MixProject do
     end
 
     coverage_run(["coveralls.json", "--import-cover", output] ++ args)
+    coverage_run(["coveralls", "--import-cover", output] ++ args)
   end
 
   defp coverage_run(args) do
-    {_, status} = System.cmd("mix", args, into: IO.stream(), env: [{"MIX_ENV", "test"}])
+    {_, status} =
+      System.cmd("mix", args,
+        into: IO.stream(),
+        env: [{"MIX_ENV", "test"}, {"JIDO_COVERAGE_DIR", Path.expand("cover/examples")}]
+      )
+
     if status != 0, do: Mix.raise("Coverage test run failed")
   end
 end

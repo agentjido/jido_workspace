@@ -11,16 +11,19 @@ defmodule Jido.Workspace.Deploy.OTPFailureTest do
     on_exit(fn -> Sandbox.destroy(sandbox) end)
     artifacts = Jido.Workspace.Deploy.Test.Releases.build(Path.join(sandbox.root, "build"))
     {:ok, target} = OTP.start(sandbox, "counter", artifacts["1"])
+    Jido.Workspace.TestSupport.TargetCoverage.start(target)
     {:ok, session} = Deploy.connect(target)
     {:ok, %{identity: before}} = Deploy.inspect(session)
     {:ok, {old_pid, ~c"1", _}} = OTP.call(target, :counter_server, :inspect, [])
     {:ok, %{count: 19}} = OTP.call(target, :counter_server, :add, [9])
     {:ok, plan} = Deploy.prepare(session, artifacts["3"])
+    Jido.Workspace.TestSupport.TargetCoverage.export(target)
     {:ok, id} = Deploy.apply(session, plan)
     assert {:ok, %{status: :recovery_required}} = Deploy.await(session, id)
 
     # OTP can restart after the point of no return. Reconnect is explicit.
     assert {:ok, ^target} = reconnect(target, 100)
+    Jido.Workspace.TestSupport.TargetCoverage.start(target)
     assert {:ok, %{identity: after_restart}} = Deploy.inspect(session)
     refute before.generation == after_restart.generation
 

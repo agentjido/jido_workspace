@@ -11,6 +11,7 @@ defmodule Jido.Workspace.Deploy.OTPReleaseTest do
     on_exit(fn -> Sandbox.destroy(sandbox) end)
     artifacts = Jido.Workspace.Deploy.Test.Releases.build(Path.join(sandbox.root, "build"))
     assert {:ok, target} = OTP.start(sandbox, "counter", artifacts["1"])
+    Jido.Workspace.TestSupport.TargetCoverage.start(target)
     assert {:ok, session} = Deploy.connect(target)
 
     assert {:ok, {pid, ~c"1", %{count: 10, requests: 0}}} =
@@ -60,6 +61,7 @@ defmodule Jido.Workspace.Deploy.OTPReleaseTest do
     on_exit(fn -> Sandbox.destroy(sandbox) end)
     artifacts = Jido.Workspace.Deploy.Test.Releases.build(Path.join(sandbox.root, "build"))
     {:ok, target} = OTP.start(sandbox, "counter", artifacts["1"])
+    Jido.Workspace.TestSupport.TargetCoverage.start(target)
     {:ok, session} = Deploy.connect(target)
 
     {:ok, plan} =
@@ -80,6 +82,7 @@ defmodule Jido.Workspace.Deploy.OTPReleaseTest do
     on_exit(fn -> Sandbox.destroy(sandbox) end)
     artifacts = Jido.Workspace.Deploy.Test.Releases.build(Path.join(sandbox.root, "build"))
     {:ok, target} = OTP.start(sandbox, "counter", artifacts["1"])
+    Jido.Workspace.TestSupport.TargetCoverage.start(target)
     {:ok, session} = Deploy.connect(target)
     {:ok, before} = OTP.call(target, :counter_server, :inspect, [])
 
