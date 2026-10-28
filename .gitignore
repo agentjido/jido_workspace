@@ -4,6 +4,7 @@
 
 # Coverage
 /cover/
+*.coverdata
 /cov/
 
 # Dialyzer
@@ -19,3 +20,10 @@
 
 # Generated docs
 /doc/
+
+# Local test output and credentials
+/tmp/
+/erl_crash.dump
+.env
+.env.*
+!.env.example

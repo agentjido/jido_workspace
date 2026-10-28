@@ -37,16 +37,19 @@ defmodule Jido.Workspace.MixProject do
   def cli do
     [
       preferred_envs: [
+        "test.coverage": :test,
         coveralls: :test,
         "coveralls.github": :test,
-        "coveralls.html": :test
+        "coveralls.html": :test,
+        "coveralls.json": :test
       ]
     ]
   end
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger, :crypto, :sasl],
+      mod: {Jido.Workspace.Application, []}
     ]
   end
 
@@ -56,11 +59,15 @@ defmodule Jido.Workspace.MixProject do
   defp deps do
     [
       # Runtime
-      {:zoi, "~> 0.18.11"},
+      {:zoi, "~> 0.19.0", override: true},
       {:splode, ">= 0.2.9 and < 0.4.0", override: true},
-      # Coordinated interfaces: agentjido/jido_shell#73 and agentjido/jido_vfs#46.
-      {:jido_shell, github: "agentjido/jido_shell", ref: "e46a4e33069b2e961ef0e6b14de50a574c7730d7", override: true},
-      {:jido_vfs, github: "agentjido/jido_vfs", ref: "3383487d48603c1b935858a964f53a44989efa21", override: true},
+      stack_dep(:jido_shell, "e8696fba7bdf3d73888e5d1ac66c99db0be45e19"),
+      stack_dep(:jido_vfs, "ae702fca9d78b81d9c8e7cf7ee624e8c819362c9"),
+
+      # Agent boundary checks
+      {:jido, "~> 2.4.0", only: :test},
+      {:jido_action, "~> 2.4.0", only: :test},
+      {:jido_signal, "~> 2.3.2", only: :test},
 
       # Dev/Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -73,14 +80,26 @@ defmodule Jido.Workspace.MixProject do
     ]
   end
 
+  defp stack_dep(name, ref) do
+    path = "../#{name}"
+
+    if File.regular?(Path.expand("#{path}/mix.exs", __DIR__)) do
+      {name, path: path, override: true}
+    else
+      {name, github: "agentjido/#{name}", ref: ref, override: true}
+    end
+  end
+
   defp aliases do
     [
       setup: ["deps.get", "git_hooks.install"],
+      "test.integration": &integration/1,
+      "test.coverage": &coverage/1,
       q: ["quality"],
       quality: [
         "format --check-formatted",
         "compile --warnings-as-errors",
-        "credo --min-priority higher",
+        "credo --strict",
         "dialyzer",
         "doctor --raise"
       ]
@@ -97,6 +116,10 @@ defmodule Jido.Workspace.MixProject do
         "README.md",
         "config",
         "lib",
+        "src",
+        "API_SPEC.md",
+        "SANDBOX.md",
+        "DEPLOY.md",
         "mix.exs",
         "usage-rules.md"
       ],
@@ -118,9 +141,58 @@ defmodule Jido.Workspace.MixProject do
       source_ref: "v#{@version}",
       extras: [
         "README.md",
+        "API_SPEC.md",
+        "SANDBOX.md",
+        "DEPLOY.md",
         "CHANGELOG.md",
-        "CONTRIBUTING.md"
+        "CONTRIBUTING.md",
+        "LICENSE"
       ]
     ]
+  end
+
+  defp integration(args) do
+    for file <- Path.wildcard("test/examples/**/*_test.exs") do
+      {_, status} =
+        System.cmd("mix", ["test", file, "--include", "integration"] ++ args,
+          into: IO.stream(),
+          env: [{"MIX_ENV", "test"}]
+        )
+
+      if status != 0, do: Mix.raise("Integration example failed: #{file}")
+    end
+  end
+
+  defp coverage(args) do
+    output = "cover/examples"
+    File.rm_rf!(output)
+    File.mkdir_p!(output)
+
+    for {file, index} <- Enum.with_index(Path.wildcard("test/examples/**/*_test.exs")) do
+      coverage_run(
+        [
+          "coveralls.json",
+          file,
+          "--include",
+          "integration",
+          "--export-coverage",
+          "examples/#{index}"
+        ] ++
+          args
+      )
+    end
+
+    coverage_run(["coveralls.json", "--import-cover", output] ++ args)
+    coverage_run(["coveralls", "--import-cover", output] ++ args)
+  end
+
+  defp coverage_run(args) do
+    {_, status} =
+      System.cmd("mix", args,
+        into: IO.stream(),
+        env: [{"MIX_ENV", "test"}, {"JIDO_COVERAGE_DIR", Path.expand("cover/examples")}]
+      )
+
+    if status != 0, do: Mix.raise("Coverage test run failed")
   end
 end

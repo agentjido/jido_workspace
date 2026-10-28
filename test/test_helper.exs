@@ -1,6 +1,1 @@
-ExUnit.start(
-  exclude: [
-    :sprite,
-    :requires_cli
-  ]
-)
+ExUnit.start(exclude: [:integration, :sprite, :requires_cli])
