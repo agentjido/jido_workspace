@@ -59,10 +59,10 @@ defmodule Jido.Workspace.MixProject do
   defp deps do
     [
       # Runtime
-      {:zoi, "~> 0.18.11"},
+      {:zoi, "~> 0.19.0", override: true},
       {:splode, ">= 0.2.9 and < 0.4.0", override: true},
-      stack_dep(:jido_shell, "e810a139e9432a864ff29978535829f1a21f3093"),
-      stack_dep(:jido_vfs, "3383487d48603c1b935858a964f53a44989efa21"),
+      stack_dep(:jido_shell, "e8696fba7bdf3d73888e5d1ac66c99db0be45e19"),
+      stack_dep(:jido_vfs, "ae702fca9d78b81d9c8e7cf7ee624e8c819362c9"),
 
       # Agent boundary checks
       {:jido, "~> 2.4.0", only: :test},
