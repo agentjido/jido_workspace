@@ -23,12 +23,10 @@ defmodule Jido.Workspace.FileApiIntegrationTest do
       reply_to: self()
     }
 
-    agent =
-      start_supervised!(
-        {Jido.AgentServer,
-         jido: __MODULE__.Runtime,
-         agent: BoundaryAgent,
-         initial_state: %{workspace_access: access}}
+    {:ok, agent} =
+      Jido.start_agent(__MODULE__.Runtime, BoundaryAgent,
+        id: "workspace-#{System.unique_integer([:positive, :monotonic])}",
+        exec_opts: [max_attempts: 1]
       )
 
     %{ws: ws, restricted: restricted, access: access, agent: agent}
@@ -106,7 +104,9 @@ defmodule Jido.Workspace.FileApiIntegrationTest do
   defp call(:action, operation, params, ctx) do
     params = parameters(params, ctx)
 
-    case Jido.Exec.run(action(operation), params, %{workspace_access: ctx.access}, max_retries: 0) do
+    case Jido.Exec.run(action(operation), params, %{workspace_access: ctx.access},
+           max_attempts: 1
+         ) do
       {:ok, %{result: data}} -> {:ok, data}
       {:error, %{details: %{domain_error: %Error{} = error}}} -> {:error, error}
     end
@@ -116,7 +116,10 @@ defmodule Jido.Workspace.FileApiIntegrationTest do
     params = parameters(params, ctx)
     prefix = "jido.workspace.v1.workspace.#{operation}"
     request = Jido.Signal.new!(prefix <> ".requested", params, source: "/workspace/file-api-test")
-    Jido.AgentServer.call(ctx.agent, request)
+
+    assert {:ok, turn} =
+             Jido.AgentServer.call(ctx.agent, request, context: %{workspace_access: ctx.access})
+
     request_id = params.request_id
     resource_id = params.resource_id
     causation_id = request.id
@@ -137,10 +140,12 @@ defmodule Jido.Workspace.FileApiIntegrationTest do
 
     case data do
       %{result: result} ->
+        assert %Jido.AgentServer.TurnResult{status: :committed} = turn
         assert type == prefix <> ".succeeded"
         {:ok, result}
 
       %{error: error} ->
+        assert %Jido.AgentServer.TurnResult{status: :failed} = turn
         assert type == prefix <> ".failed"
         # The test accepts only known codes; it never creates atoms from Signal data.
         code = Enum.find([:not_found, :closed, :policy_denied], &(to_string(&1) == error.code))

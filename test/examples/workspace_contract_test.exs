@@ -23,12 +23,10 @@ defmodule Jido.Workspace.ContractIntegrationTest do
       resources: %{"draft" => {:workspace, ws}, "readonly" => {:workspace, restricted}}
     }
 
-    agent =
-      start_supervised!(
-        {Jido.AgentServer,
-         jido: __MODULE__.Runtime,
-         agent: BoundaryAgent,
-         initial_state: %{workspace_access: access}}
+    {:ok, agent} =
+      Jido.start_agent(__MODULE__.Runtime, BoundaryAgent,
+        id: "workspace-#{System.unique_integer([:positive, :monotonic])}",
+        exec_opts: [max_attempts: 1]
       )
 
     %{ws: ws, restricted: restricted, access: access, agent: agent}
@@ -284,7 +282,7 @@ defmodule Jido.Workspace.ContractIntegrationTest do
            action(operation),
            parameters(params, ctx),
            %{workspace_access: ctx.access},
-           max_retries: 0
+           max_attempts: 1
          ) do
       {:ok, %{result: data}} -> {:ok, data}
       {:error, %{details: %{domain_error: error}}} -> normalize({:error, error})
@@ -295,7 +293,10 @@ defmodule Jido.Workspace.ContractIntegrationTest do
     params = parameters(params, ctx)
     prefix = "jido.workspace.v1.workspace.#{operation}"
     request = Jido.Signal.new!(prefix <> ".requested", params, source: "/workspace/contract-test")
-    Jido.AgentServer.call(ctx.agent, request)
+
+    assert {:ok, turn} =
+             Jido.AgentServer.call(ctx.agent, request, context: %{workspace_access: ctx.access})
+
     %{request_id: request_id, resource_id: resource_id} = params
     causation = request.id
 
@@ -315,10 +316,12 @@ defmodule Jido.Workspace.ContractIntegrationTest do
 
     case data do
       %{result: result} ->
+        assert %Jido.AgentServer.TurnResult{status: :committed} = turn
         assert type == prefix <> ".succeeded"
         {:ok, result}
 
       %{error: error} ->
+        assert %Jido.AgentServer.TurnResult{status: :failed} = turn
         assert type == prefix <> ".failed"
         {:error, error}
     end

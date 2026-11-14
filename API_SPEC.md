@@ -445,14 +445,14 @@ They are not untrusted serialized Erlang terms.
   %{request_id: "req-1", resource_id: "draft", path: "/input.txt",
     content: "hello", encoding: "utf8"},
   %{workspace_access: trusted_access},
-  max_retries: 0
+  max_attempts: 1
 )
 ```
 
 Success returns `{:ok, %{request_id: id, resource_id: id, result: map}}`. Failure
-returns a Jido Action error with the domain Error retained in its details. An
-adapter must also support the trusted access value in `context.state`, because
-the direct Agent strategy supplies Agent state there. No resource handles,
+returns a `Jido.Error` with the domain Error retained in its details.
+The host supplies trusted access in the per-call `workspace_access` context.
+Agent routes keep state unchanged and use `exec_opts: [max_attempts: 1]`. No resource handles,
 permissions, backend choices, callback modules, or reply destinations come from
 model-supplied parameters. Open/attach require host-registered profiles. Apply
 requires access to that exact stored plan; it does not imply source acceptance.
@@ -466,12 +466,23 @@ Workspace in a short-lived Action task.
 Use versioned request names and explicit routes:
 
 ```elixir
-signal_routes: [
-  {"jido.workspace.v1.workspace.write.requested", Actions.Workspace.Write},
-  {"jido.workspace.v1.sandbox.exec.requested", Actions.Sandbox.Exec},
-  {"jido.workspace.v1.deploy.prepare.requested", Actions.Deploy.Prepare},
-  {"jido.workspace.v1.deploy.apply.requested", Actions.Deploy.Apply}
-]
+routes do
+  route "jido.workspace.v1.workspace.write.requested", Actions.Workspace.Write do
+    state :unchanged
+  end
+
+  route "jido.workspace.v1.sandbox.exec.requested", Actions.Sandbox.Exec do
+    state :unchanged
+  end
+
+  route "jido.workspace.v1.deploy.prepare.requested", Actions.Deploy.Prepare do
+    state :unchanged
+  end
+
+  route "jido.workspace.v1.deploy.apply.requested", Actions.Deploy.Apply do
+    state :unchanged
+  end
+end
 
 request = Jido.Signal.new!(
   "jido.workspace.v1.workspace.write.requested",
@@ -479,7 +490,7 @@ request = Jido.Signal.new!(
     content: "hello", encoding: "utf8"},
   source: "/studio/agent/author"
 )
-Jido.AgentServer.call(agent, request)
+Jido.AgentServer.call(agent, request, context: %{workspace_access: trusted_access})
 ```
 
 The Signal adapter supplies the same Action parameters and trusted context.
@@ -589,8 +600,8 @@ resource-bound references for captures, revisions, file views, and raw handles.
 The test adapter supports UTF-8 text only and resolves pre-opened resources.
 It sends replies for calls that reach an Action. Correlated schema/routing
 failure replies and production reference access remain future adapter work.
-The test Agent sets instruction `max_retries: 0` in `on_before_cmd/2`; the Jido
-executor's default retries would otherwise repeat effectful calls and replies.
+The test Agent uses `exec_opts: [max_attempts: 1]` at startup. Direct Action
+calls also use `max_attempts: 1`. Each effectful call runs at most once.
 
 Run from `jido_workspace`:
 
