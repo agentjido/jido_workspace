@@ -6,7 +6,7 @@ defmodule Jido.Workspace.TestSupport.ActionBoundary do
   end
 
   def perform(params, context, kind, operation) do
-    access = Map.fetch!(Map.get(context, :state, context), :workspace_access)
+    access = Map.fetch!(context, :workspace_access)
 
     result =
       case Map.fetch(access.resources, params.resource_id) do
@@ -38,8 +38,7 @@ defmodule Jido.Workspace.TestSupport.ActionBoundary do
         {:ok, envelope}
 
       {:error, reason} ->
-        {:error,
-         Jido.Action.Error.execution_error("Workspace request failed", %{domain_error: reason})}
+        {:error, Jido.Error.execution_error("Workspace request failed", %{domain_error: reason})}
     end
   end
 
@@ -411,35 +410,87 @@ defmodule Jido.Workspace.TestSupport.BoundaryAgent do
   @moduledoc "A fixed Jido Agent for API integration evidence. It does not use a model."
   alias Jido.Workspace.TestSupport.Actions
 
-  use Jido.Agent,
-    name: "workspace_boundary_test",
-    schema: Zoi.object(%{workspace_access: Zoi.any()}),
-    signal_routes: [
-      {"jido.workspace.v1.workspace.write.requested", Actions.Write},
-      {"jido.workspace.v1.workspace.read.requested", Actions.Read},
-      {"jido.workspace.v1.workspace.mkdir.requested", Actions.Mkdir},
-      {"jido.workspace.v1.workspace.delete.requested", Actions.Delete},
-      {"jido.workspace.v1.workspace.close.requested", Actions.Close},
-      {"jido.workspace.v1.workspace.run.requested", Actions.Run},
-      {"jido.workspace.v1.workspace.info.requested", Actions.Info},
-      {"jido.workspace.v1.workspace.list.requested", Actions.List},
-      {"jido.workspace.v1.workspace.file_view.requested", Actions.FileView},
-      {"jido.workspace.v1.workspace.start_session.requested", Actions.StartSession},
-      {"jido.workspace.v1.workspace.stop_session.requested", Actions.StopSession},
-      {"jido.workspace.v1.workspace.filesystem.requested", Actions.Filesystem},
-      {"jido.workspace.v1.workspace.shell.requested", Actions.Shell},
-      {"jido.workspace.v1.workspace.capture.requested", Actions.Capture},
-      {"jido.workspace.v1.workspace.replace.requested", Actions.Replace},
-      {"jido.workspace.v1.sandbox.exec.requested", Actions.Exec},
-      {"jido.workspace.v1.deploy.prepare.requested", Actions.Prepare},
-      {"jido.workspace.v1.deploy.apply.requested", Actions.Apply},
-      {"jido.workspace.v1.deploy.await.requested", Actions.Await}
-    ]
+  use Jido.Agent, name: "workspace_boundary_test"
 
-  # Effectful Actions must not use the executor's default retry count.
-  @impl true
-  def on_before_cmd(agent, action) do
-    {:ok, instructions} = Jido.Instruction.normalize(action, %{}, max_retries: 0)
-    {:ok, agent, instructions}
+  state do
+    schema(Jido.Joi.object(%{}))
+  end
+
+  routes do
+    route "jido.workspace.v1.workspace.write.requested", Actions.Write do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.read.requested", Actions.Read do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.mkdir.requested", Actions.Mkdir do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.delete.requested", Actions.Delete do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.close.requested", Actions.Close do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.run.requested", Actions.Run do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.info.requested", Actions.Info do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.list.requested", Actions.List do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.file_view.requested", Actions.FileView do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.start_session.requested", Actions.StartSession do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.stop_session.requested", Actions.StopSession do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.filesystem.requested", Actions.Filesystem do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.shell.requested", Actions.Shell do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.capture.requested", Actions.Capture do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.workspace.replace.requested", Actions.Replace do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.sandbox.exec.requested", Actions.Exec do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.deploy.prepare.requested", Actions.Prepare do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.deploy.apply.requested", Actions.Apply do
+      state(:unchanged)
+    end
+
+    route "jido.workspace.v1.deploy.await.requested", Actions.Await do
+      state(:unchanged)
+    end
   end
 end

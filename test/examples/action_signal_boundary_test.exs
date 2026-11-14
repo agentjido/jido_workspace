@@ -35,12 +35,10 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
       }
     }
 
-    agent =
-      start_supervised!(
-        {Jido.AgentServer,
-         jido: __MODULE__.Runtime,
-         agent: BoundaryAgent,
-         initial_state: %{workspace_access: access}}
+    {:ok, agent} =
+      Jido.start_agent(__MODULE__.Runtime, BoundaryAgent,
+        id: "workspace-#{System.unique_integer([:positive, :monotonic])}",
+        exec_opts: [max_attempts: 1]
       )
 
     %{
@@ -57,25 +55,27 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
     params = %{request_id: "direct-write", resource_id: "draft", path: "/input", content: "first"}
 
     assert {:ok, %{request_id: "direct-write", result: %{path: "/input"}}} =
-             Jido.Exec.run(Actions.Write, params, %{workspace_access: ctx.access}, max_retries: 0)
+             Jido.Exec.run(Actions.Write, params, %{workspace_access: ctx.access},
+               max_attempts: 1
+             )
 
     assert {:ok, "first"} = Workspace.read(ctx.ws, "/input")
 
     assert %{result: %{content: "first"}} =
-             request(ctx.agent, "workspace.read", %{path: "/input"})
+             request(ctx, "workspace.read", %{path: "/input"})
 
     {:ok, view} = Workspace.file_view(ctx.ws)
     view_ref = ActionBoundary.put(ctx.access.store, "draft", :file_view, view)
 
     assert %{result: %{output: "first", checked_files: true}} =
-             request(ctx.agent, "workspace.run", %{command: "cat /input", file_view_ref: view_ref})
+             request(ctx, "workspace.run", %{command: "cat /input", file_view_ref: view_ref})
 
-    saved = request(ctx.agent, "workspace.capture", %{}).result
-    request(ctx.agent, "workspace.write", %{path: "/input", content: "second"})
+    saved = request(ctx, "workspace.capture", %{}).result
+    request(ctx, "workspace.write", %{path: "/input", content: "second"})
 
     assert %{error: %{code: "stale_file_view"}} =
              request(
-               ctx.agent,
+               ctx,
                "workspace.run",
                %{command: "write /marker bad", file_view_ref: view_ref},
                "draft",
@@ -85,13 +85,13 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
     assert {:error, %Jido.Workspace.Error{code: :not_found}} = Workspace.read(ctx.ws, "/marker")
 
     assert %{error: %{code: "stale_revision"}} =
-             request(ctx.agent, "workspace.replace", saved, "draft", "failed")
+             request(ctx, "workspace.replace", saved, "draft", "failed")
 
     assert {:ok, "second"} = Workspace.read(ctx.ws, "/input")
-    current = request(ctx.agent, "workspace.capture", %{}).result
+    current = request(ctx, "workspace.capture", %{}).result
 
     assert %{result: %{revision_ref: _}} =
-             request(ctx.agent, "workspace.replace", %{saved | revision_ref: current.revision_ref})
+             request(ctx, "workspace.replace", %{saved | revision_ref: current.revision_ref})
 
     assert {:ok, "first"} = Workspace.read(ctx.ws, "/input")
     {:ok, capture} = ActionBoundary.fetch(ctx.access.store, "draft", :capture, saved.capture_ref)
@@ -103,7 +103,7 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
   test "policy, resource access, and Action schemas refuse changes", ctx do
     assert %{error: %{code: "policy_denied", operation: "write"}} =
              request(
-               ctx.agent,
+               ctx,
                "workspace.write",
                %{path: "/blocked", content: "bad"},
                "readonly",
@@ -115,7 +115,7 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
 
     assert %{error: %{code: "resource_not_found"}} =
              request(
-               ctx.agent,
+               ctx,
                "workspace.write",
                %{path: "/blocked", content: "bad"},
                "unknown",
@@ -127,27 +127,27 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
                Actions.Write,
                %{request_id: "invalid", resource_id: "draft", path: "/blocked", content: 42},
                %{workspace_access: ctx.access},
-               max_retries: 0
+               max_attempts: 1
              )
 
     assert {:error, %Jido.Workspace.Error{code: :not_found}} = Workspace.read(ctx.ws, "/blocked")
 
-    saved = request(ctx.agent, "workspace.capture", %{}).result
+    saved = request(ctx, "workspace.capture", %{}).result
 
     assert %{error: %{code: "resource_not_found"}} =
-             request(ctx.agent, "workspace.replace", saved, "readonly", "failed")
+             request(ctx, "workspace.replace", saved, "readonly", "failed")
 
     refute_receive {:signal, _}
   end
 
   test "Agent Signals run a local command and deploy the captured workspace bytes", ctx do
-    request(ctx.agent, "workspace.write", %{path: "/index.txt", content: "accepted bytes"})
+    request(ctx, "workspace.write", %{path: "/index.txt", content: "accepted bytes"})
     {:ok, bytes} = Workspace.read(ctx.ws, "/index.txt")
     :ok = Sandbox.write(ctx.sandbox, "input.txt", bytes)
 
     assert %{result: %{output: "accepted bytes", exit_status: 0}} =
              request(
-               ctx.agent,
+               ctx,
                "sandbox.exec",
                %{executable: "/bin/cat", args: ["input.txt"]},
                "execution"
@@ -155,7 +155,7 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
 
     assert %{result: %{exit_status: 7}} =
              request(
-               ctx.agent,
+               ctx,
                "sandbox.exec",
                %{executable: "/bin/sh", args: ["-c", "exit 7"]},
                "execution"
@@ -165,12 +165,12 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
     {:ok, artifact} = Artifact.new(:source, "1", snapshot)
     artifact_ref = ActionBoundary.put(ctx.access.store, "site", :artifact, artifact)
 
-    prepared = request(ctx.agent, "deploy.prepare", %{artifact_ref: artifact_ref}, "site").result
+    prepared = request(ctx, "deploy.prepare", %{artifact_ref: artifact_ref}, "site").result
     assert {:ok, %{identity: %{current: nil}}} = Deploy.inspect(ctx.deployment)
     refute File.exists?(Path.join(ctx.sandbox.root, "site/current"))
 
-    applied = request(ctx.agent, "deploy.apply", prepared, "site").result
-    assert %{result: ^applied} = request(ctx.agent, "deploy.apply", prepared, "site")
+    applied = request(ctx, "deploy.apply", prepared, "site").result
+    assert %{result: ^applied} = request(ctx, "deploy.apply", prepared, "site")
 
     assert %{
              result: %{
@@ -181,7 +181,7 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
                state_policy: "files_only"
              }
            } =
-             request(ctx.agent, "deploy.await", applied, "site")
+             request(ctx, "deploy.await", applied, "site")
 
     assert digest == snapshot.digest
     assert steps > 0
@@ -192,7 +192,7 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
     refute Process.alive?(ctx.deployment)
   end
 
-  defp request(agent, operation, data, resource_id \\ "draft", outcome \\ "succeeded") do
+  defp request(ctx, operation, data, resource_id \\ "draft", outcome \\ "succeeded") do
     request_id = "request-#{System.unique_integer([:positive, :monotonic])}"
     prefix = "jido.workspace.v1." <> operation
 
@@ -204,7 +204,14 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
       )
 
     # An Agent acknowledgement does not prove that the requested operation succeeded.
-    Jido.AgentServer.call(agent, signal, 15_000)
+    assert {:ok, turn} =
+             Jido.AgentServer.call(ctx.agent, signal,
+               timeout: 15_000,
+               context: %{workspace_access: ctx.access}
+             )
+
+    expected_status = if outcome == "succeeded", do: :committed, else: :failed
+    assert %Jido.AgentServer.TurnResult{status: ^expected_status} = turn
 
     expected_type = prefix <> "." <> outcome
     causation_id = signal.id

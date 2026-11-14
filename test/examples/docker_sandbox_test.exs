@@ -251,37 +251,44 @@ defmodule Jido.Workspace.Sandbox.DockerTest do
     }
 
     assert {:ok, %{result: %{output: "through boundaries", exit_status: 0}}} =
-             Jido.Exec.run(Actions.Exec, params, %{workspace_access: access}, max_retries: 0)
+             Jido.Exec.run(Actions.Exec, params, %{workspace_access: access}, max_attempts: 1)
 
-    agent =
-      start_supervised!(
-        {Jido.AgentServer,
-         jido: __MODULE__.Runtime,
-         agent: BoundaryAgent,
-         initial_state: %{workspace_access: access}}
+    {:ok, agent} =
+      Jido.start_agent(__MODULE__.Runtime, BoundaryAgent,
+        id: "workspace-#{System.unique_integer([:positive, :monotonic])}",
+        exec_opts: [max_attempts: 1]
       )
 
-    assert %{result: %{output: "through boundaries", exit_status: 0}} = request(agent, params)
+    assert %{result: %{output: "through boundaries", exit_status: 0}} =
+             request(agent, access, params)
 
     assert %{result: %{exit_status: 7}} =
-             request(agent, %{params | executable: "/bin/sh", args: ["-c", "exit 7"]})
+             request(agent, access, %{params | executable: "/bin/sh", args: ["-c", "exit 7"]})
 
     assert %{error: %{code: "resource_not_found"}} =
-             request(agent, %{params | resource_id: "unknown"}, "failed")
+             request(agent, access, %{params | resource_id: "unknown"}, "failed")
 
     assert {:error, _} =
              Jido.Exec.run(Actions.Exec, %{params | args: [42]}, %{workspace_access: access},
-               max_retries: 0
+               max_attempts: 1
              )
   end
 
-  defp request(agent, params, outcome \\ "succeeded") do
+  defp request(agent, access, params, outcome \\ "succeeded") do
     signal =
       Jido.Signal.new!("jido.workspace.v1.sandbox.exec.requested", params,
         source: "/sandbox/docker-test"
       )
 
-    Jido.AgentServer.call(agent, signal, 30_000)
+    assert {:ok, turn} =
+             Jido.AgentServer.call(agent, signal,
+               timeout: 30_000,
+               context: %{workspace_access: access}
+             )
+
+    expected_status = if outcome == "succeeded", do: :committed, else: :failed
+    assert %Jido.AgentServer.TurnResult{status: ^expected_status} = turn
+
     type = "jido.workspace.v1.sandbox.exec." <> outcome
     causation = signal.id
 

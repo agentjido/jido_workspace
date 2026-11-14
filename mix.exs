@@ -61,13 +61,12 @@ defmodule Jido.Workspace.MixProject do
       # Runtime
       {:zoi, "~> 0.19.0", override: true},
       {:splode, ">= 0.2.9 and < 0.4.0", override: true},
-      stack_dep(:jido_shell, "e8696fba7bdf3d73888e5d1ac66c99db0be45e19"),
-      stack_dep(:jido_vfs, "ae702fca9d78b81d9c8e7cf7ee624e8c819362c9"),
+      stack_dep(:jido_shell, "f2addc04ca620078f74885cb71f10a7cd29f763e"),
+      stack_dep(:jido_vfs, "eba18f591b66a88efab4aacfd7cd50ab2475efee"),
 
       # Agent boundary checks
-      {:jido, "~> 2.4.0", only: :test},
-      {:jido_action, "~> 2.4.0", only: :test},
-      {:jido_signal, "~> 2.3.2", only: :test},
+      {:jido,
+       github: "agentjido/jido", ref: "05723b96c6ead47dec04fe69b1c34ad62f999c54", only: :test},
 
       # Dev/Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
