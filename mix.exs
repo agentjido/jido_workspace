@@ -66,7 +66,7 @@ defmodule Jido.Workspace.MixProject do
 
       # Agent boundary checks
       {:jido,
-       github: "agentjido/jido", ref: "05723b96c6ead47dec04fe69b1c34ad62f999c54", only: :test},
+       github: "agentjido/jido", ref: "047bf746330a2fbe7c3b25c045552e0303c97eaf", only: :test},
 
       # Dev/Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
