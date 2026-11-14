@@ -623,3 +623,15 @@ caller exit, attach, controller shutdown, policy, stale views, missing images,
 OCI start failure, Jido Actions, and correlated Agent Signal replies. Set
 `JIDO_SANDBOX_DOCKER=1` to run it. Tests assert cleanup with ownership labels.
 The same file uses runsc when available; otherwise it checks refusal only.
+
+## Consolidated Jido v3 boundary
+
+Workspace has no required core runtime dependency. Its test graph uses one
+consolidated `jido` dependency. Core owns `Jido.Action`, `Jido.Signal`, and
+`Jido.AI`. Do not add their separate legacy packages to this graph.
+
+The deterministic examples in `test/examples/action_signal_boundary_test.exs`,
+`workspace_contract_test.exs`, and `workspace_file_api_test.exs` check core
+Actions and AgentServer calls against the same Workspace resources. The host
+supplies resource access and policy. Workspace owns file and session lifetime.
+Shell owns command execution; VFS owns adapter operations and captures.
