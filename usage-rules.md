@@ -13,7 +13,7 @@
 - Read/write files in workspace artifacts
 - List directory contents
 - Create/delete directories and files
-- Capture and restore workspace snapshots
+- Capture and replace workspace files with a revision check
 - Run shell commands in a workspace session
 
 ### Path Rules
@@ -32,5 +32,5 @@
 ### Backend Rules
 
 - Root mount defaults to in-memory adapter
-- Custom `Jido.VFS` adapters are supported via `new/1` options
+- Custom `Jido.VFS` adapters are supported via `open/1` options
 - Workspace file operations route through `Jido.Shell.VFS`

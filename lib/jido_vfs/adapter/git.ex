@@ -1,0 +1,577 @@
+defmodule Jido.VFS.Adapter.Git do
+  @moduledoc """
+  Jido.VFS adapter for Git repositories with versioning support.
+
+  This adapter provides filesystem operations backed by a Git repository,
+  with automatic or manual commit modes for version control.
+
+  ## Direct usage
+
+      filesystem = Jido.VFS.Adapter.Git.configure(
+        path: "/path/to/repo",
+        mode: :manual,
+        author: [name: "Bot", email: "bot@example.com"]
+      )
+
+      Jido.VFS.write(filesystem, "file.txt", "content")
+      Jido.VFS.commit(filesystem, "Add new file")
+
+  ## Options
+
+    * `:path` - Path to Git repository (will be created if doesn't exist)
+    * `:branch` - Git branch to use (defaults to current branch or "main")
+    * `:mode` - `:auto` commits on every operation, `:manual` requires explicit commits
+    * `:author` - Author info `[name: "Name", email: "email@domain.com"]`
+    * `:commit_message` - Function to generate commit messages `(operation_info) -> String.t()`
+
+  """
+
+  alias Jido.VFS.Adapter.Local
+  alias Jido.VFS.Errors
+  alias Jido.VFS.Revision
+
+  defmodule Config do
+    @moduledoc """
+    Runtime configuration for the Git adapter.
+    """
+
+    @enforce_keys [:repo_path, :branch, :author_name, :author_email, :auto_commit?, :local_config]
+    defstruct [
+      :repo_path,
+      :branch,
+      :author_name,
+      :author_email,
+      :auto_commit?,
+      :local_config,
+      commit_message: &__MODULE__.default_commit_message/1
+    ]
+
+    @type t :: %__MODULE__{
+            repo_path: String.t(),
+            branch: String.t(),
+            author_name: String.t(),
+            author_email: String.t(),
+            auto_commit?: boolean(),
+            local_config: map(),
+            commit_message: (map() -> String.t())
+          }
+
+    @doc """
+    Builds the default commit message for auto-generated Git commits.
+    """
+    @spec default_commit_message(%{operation: term(), path: term()}) :: String.t()
+    def default_commit_message(%{operation: op, path: path}) do
+      "Jido.VFS #{op} #{path} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+    end
+  end
+
+  @behaviour Jido.VFS.Adapter
+  @behaviour Jido.VFS.Adapter.Versioning
+
+  @impl Jido.VFS.Adapter
+  def unsupported_operations, do: [:copy_between]
+
+  @impl Jido.VFS.Adapter
+  def versioning_module, do: __MODULE__
+
+  @impl Jido.VFS.Adapter
+  @spec configure(keyword()) :: {__MODULE__, Config.t()}
+  def configure(opts) do
+    repo_path = Keyword.fetch!(opts, :path)
+    mode = Keyword.get(opts, :mode, :manual)
+    branch = Keyword.get(opts, :branch)
+    author = Keyword.get(opts, :author, [])
+    commit_message_fn = Keyword.get(opts, :commit_message, &Config.default_commit_message/1)
+    author_name = Keyword.get(author, :name, "Jido.VFS")
+    author_email = Keyword.get(author, :email, "jido.vfs@localhost")
+
+    # Ensure Git is available
+    case System.find_executable("git") do
+      nil -> raise "Git executable not found in PATH"
+      _ -> :ok
+    end
+
+    # Initialize or validate repository
+    {repo_path, current_branch} = setup_repository(repo_path, branch, author_name, author_email)
+
+    # Configure local adapter for actual file operations
+    local_config = Local.configure(prefix: repo_path) |> elem(1)
+
+    config = %Config{
+      repo_path: repo_path,
+      branch: current_branch,
+      author_name: author_name,
+      author_email: author_email,
+      auto_commit?: mode == :auto,
+      local_config: local_config,
+      commit_message: commit_message_fn
+    }
+
+    {__MODULE__, config}
+  end
+
+  defp setup_repository(path, target_branch, author_name, author_email) do
+    path = Path.expand(path)
+
+    # Create directory if it doesn't exist
+    File.mkdir_p!(path)
+
+    # Initialize repo if not already a Git repo
+    unless File.exists?(Path.join(path, ".git")) do
+      git!(path, ["init"])
+      # Create initial commit to establish branch
+      File.write!(Path.join(path, ".gitkeep"), "")
+      git!(path, ["add", ".gitkeep"])
+
+      git!(path, [
+        "-c",
+        "user.name=#{author_name}",
+        "-c",
+        "user.email=#{author_email}",
+        "commit",
+        "-m",
+        "Initial commit"
+      ])
+    end
+
+    # Get current branch
+    current_branch = get_current_branch(path)
+
+    # Handle branch selection
+    final_branch =
+      cond do
+        target_branch == nil ->
+          # Use current branch
+          current_branch
+
+        target_branch == current_branch ->
+          # Already on target branch
+          current_branch
+
+        branch_exists?(path, target_branch) ->
+          # Switch to existing branch
+          git!(path, ["checkout", target_branch])
+          target_branch
+
+        true ->
+          # Create and switch to new branch
+          git!(path, ["checkout", "-b", target_branch])
+          target_branch
+      end
+
+    {path, final_branch}
+  end
+
+  defp get_current_branch(repo_path) do
+    case git(repo_path, ["branch", "--show-current"]) do
+      {output, 0} ->
+        String.trim(output)
+
+      _ ->
+        # Fallback for older Git versions or detached HEAD
+        case git(repo_path, ["symbolic-ref", "--short", "HEAD"]) do
+          {output, 0} -> String.trim(output)
+          _ -> "main"
+        end
+    end
+  end
+
+  defp branch_exists?(repo_path, branch) do
+    case git(repo_path, ["show-ref", "--verify", "--quiet", "refs/heads/#{branch}"]) do
+      {_, 0} -> true
+      _ -> false
+    end
+  end
+
+  defp git!(repo_path, args) do
+    case git(repo_path, args) do
+      {output, 0} -> output
+      {output, code} -> raise "Git command failed (#{code}): #{output}"
+    end
+  end
+
+  defp git(repo_path, args) do
+    opts = [cd: repo_path, stderr_to_stdout: true]
+
+    opts =
+      if Application.get_env(
+           :jido_workspace,
+           :vfs_test_mode,
+           Application.get_env(:jido_vfs, :test_mode, false)
+         ) do
+        Keyword.put(opts, :env, [{"GIT_TEMPLATE_DIR", ""}])
+      else
+        opts
+      end
+
+    System.cmd("git", args, opts)
+  end
+
+  defp stage_and_commit(config, operation_info) do
+    # Stage all changes
+    git!(config.repo_path, ["add", "-A"])
+
+    # Check if there are any changes to commit
+    case git(config.repo_path, ["diff", "--cached", "--quiet"]) do
+      {_, 0} ->
+        # No changes to commit
+        :ok
+
+      _ ->
+        # There are changes, commit them
+        message = config.commit_message.(operation_info)
+
+        git!(config.repo_path, [
+          "-c",
+          "user.name=#{config.author_name}",
+          "-c",
+          "user.email=#{config.author_email}",
+          "commit",
+          "-m",
+          message
+        ])
+
+        :ok
+    end
+  end
+
+  defp maybe_auto_commit(config, operation_info) do
+    if config.auto_commit? do
+      stage_and_commit(config, operation_info)
+    else
+      # Just stage the changes
+      git!(config.repo_path, ["add", "-A"])
+      :ok
+    end
+  end
+
+  # Delegate all standard filesystem operations to Local adapter
+  # then handle Git operations
+
+  @impl Jido.VFS.Adapter
+  def write(config, path, contents, opts) do
+    case Local.write(config.local_config, path, contents, opts) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :write, path: path})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def read(config, path) do
+    Local.read(config.local_config, path)
+  end
+
+  @impl Jido.VFS.Adapter
+  def read_stream(config, path, opts) do
+    Local.read_stream(config.local_config, path, opts)
+  end
+
+  @impl Jido.VFS.Adapter
+  def write_stream(config, path, opts) do
+    case Local.write_stream(config.local_config, path, opts) do
+      {:ok, stream} ->
+        # Return the stream directly - auto-commit will need to be handled externally
+        {:ok, stream}
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def delete(config, path) do
+    case Local.delete(config.local_config, path) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :delete, path: path})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def move(config, source, destination, opts) do
+    case Local.move(config.local_config, source, destination, opts) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :move, path: "#{source} -> #{destination}"})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def copy(config, source, destination, opts) do
+    case Local.copy(config.local_config, source, destination, opts) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :copy, path: "#{source} -> #{destination}"})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def copy(_source_config, _source_path, _destination_config, _destination_path, _opts) do
+    # Cross-adapter copy not supported for Git
+    {:error, Errors.UnsupportedOperation.exception(operation: :copy_between, adapter: __MODULE__)}
+  end
+
+  @impl Jido.VFS.Adapter
+  def file_exists(config, path) do
+    Local.file_exists(config.local_config, path)
+  end
+
+  @impl Jido.VFS.Adapter
+  def list_contents(config, path) do
+    Local.list_contents(config.local_config, path)
+  end
+
+  @impl Jido.VFS.Adapter
+  def create_directory(config, path, opts) do
+    case Local.create_directory(config.local_config, path, opts) do
+      :ok ->
+        # Git doesn't track empty directories, so create a .gitkeep file
+        gitkeep_path = Path.join(path, ".gitkeep")
+
+        case Local.write(config.local_config, gitkeep_path, "", []) do
+          :ok ->
+            maybe_auto_commit(config, %{operation: :create_directory, path: path})
+
+          error ->
+            error
+        end
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def delete_directory(config, path, opts) do
+    case Local.delete_directory(config.local_config, path, opts) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :delete_directory, path: path})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def clear(config) do
+    case clear_repository_contents(config.repo_path) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :clear, path: "."})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def set_visibility(config, path, visibility) do
+    case Local.set_visibility(config.local_config, path, visibility) do
+      :ok ->
+        maybe_auto_commit(config, %{operation: :set_visibility, path: path})
+
+      error ->
+        error
+    end
+  end
+
+  @impl Jido.VFS.Adapter
+  def visibility(config, path) do
+    Local.visibility(config.local_config, path)
+  end
+
+  @impl Jido.VFS.Adapter
+  def starts_processes, do: false
+
+  defp clear_repository_contents(repo_path) do
+    with {:ok, entries} <- File.ls(repo_path) do
+      entries
+      |> Enum.reject(&(&1 == ".git"))
+      |> Enum.reduce_while(:ok, fn entry, :ok ->
+        path = Path.join(repo_path, entry)
+
+        case File.rm_rf(path) do
+          {:ok, _} ->
+            {:cont, :ok}
+
+          {:error, reason, _failed_path} ->
+            {:halt, {:error, Errors.to_error(reason)}}
+        end
+      end)
+    else
+      {:error, reason} ->
+        {:error, Errors.to_error(reason)}
+    end
+  end
+
+  # Versioning behaviour implementation
+
+  @impl Jido.VFS.Adapter.Versioning
+  @spec commit(Config.t(), String.t() | nil, keyword()) :: :ok | {:error, term}
+  def commit(config, message \\ nil, _opts \\ []) do
+    try do
+      # Stage all changes first
+      git!(config.repo_path, ["add", "-A"])
+
+      # Check if there are any changes to commit
+      case git(config.repo_path, ["diff", "--cached", "--quiet"]) do
+        {_, 0} ->
+          # No changes to commit
+          :ok
+
+        _ ->
+          # There are changes, commit them
+          commit_message =
+            message || "Manual commit at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+
+          git!(config.repo_path, [
+            "-c",
+            "user.name=#{config.author_name}",
+            "-c",
+            "user.email=#{config.author_email}",
+            "commit",
+            "-m",
+            commit_message
+          ])
+
+          :ok
+      end
+    rescue
+      e -> {:error, adapter_error(:commit, e)}
+    end
+  end
+
+  @impl Jido.VFS.Adapter.Versioning
+  @spec revisions(Config.t(), String.t(), keyword()) :: {:ok, [Revision.t()]} | {:error, term}
+  def revisions(config, path \\ ".", opts \\ []) do
+    try do
+      limit = Keyword.get(opts, :limit)
+
+      args = ["log", "--pretty=format:%H|%an|%ae|%at|%s"]
+      args = if limit, do: args ++ ["--max-count=#{limit}"], else: args
+      args = if path != "." and path != "", do: args ++ ["--", path], else: args
+
+      case git(config.repo_path, args) do
+        {output, 0} ->
+          revisions =
+            output
+            |> String.split("\n", trim: true)
+            |> Enum.map(&parse_revision_line/1)
+
+          {:ok, revisions}
+
+        {error, _code} ->
+          {:error, adapter_error(:revisions, error)}
+      end
+    rescue
+      e -> {:error, adapter_error(:revisions, e)}
+    end
+  end
+
+  defp parse_revision_line(line) do
+    [sha, author_name, author_email, timestamp, message] = String.split(line, "|", parts: 5)
+
+    datetime =
+      timestamp
+      |> String.to_integer()
+      |> DateTime.from_unix!()
+
+    %Revision{
+      sha: sha,
+      author_name: author_name,
+      author_email: author_email,
+      message: message,
+      timestamp: datetime
+    }
+  end
+
+  @impl Jido.VFS.Adapter.Versioning
+  @spec read_revision(Config.t(), String.t(), String.t(), keyword()) ::
+          {:ok, binary()} | {:error, term}
+  def read_revision(config, path, sha, _opts \\ []) do
+    try do
+      case git(config.repo_path, ["show", "#{sha}:#{path}"]) do
+        {output, 0} -> {:ok, output}
+        {error, _code} -> {:error, read_revision_error(path, error)}
+      end
+    rescue
+      e -> {:error, adapter_error(:read_revision, e)}
+    end
+  end
+
+  @impl Jido.VFS.Adapter.Versioning
+  @spec rollback(Config.t(), String.t(), keyword()) :: :ok | {:error, term}
+  def rollback(config, sha, opts \\ []) do
+    try do
+      with :ok <- ensure_commit_exists(config, sha) do
+        if path = Keyword.get(opts, :path) do
+          case git(config.repo_path, ["checkout", sha, "--", path]) do
+            {_output, 0} -> :ok
+            {error, _code} -> {:error, rollback_path_error(path, error)}
+          end
+        else
+          case git(config.repo_path, ["reset", "--hard", sha]) do
+            {_output, 0} -> :ok
+            {error, _code} -> {:error, adapter_error(:rollback, %{revision: sha, reason: error})}
+          end
+        end
+      end
+    rescue
+      e -> {:error, adapter_error(:rollback, e)}
+    end
+  end
+
+  defp ensure_commit_exists(config, sha) do
+    case git(config.repo_path, ["cat-file", "-e", "#{sha}^{commit}"]) do
+      {_output, 0} ->
+        :ok
+
+      {error, _code} ->
+        {:error, adapter_error(:rollback, %{revision: sha, reason: error})}
+    end
+  end
+
+  defp read_revision_error(path, error) when is_binary(error) do
+    if String.contains?(error, "exists on disk, but not in") or
+         String.contains?(error, "does not exist in") do
+      Errors.FileNotFound.exception(file_path: path)
+    else
+      adapter_error(:read_revision, error)
+    end
+  end
+
+  defp read_revision_error(_path, error), do: adapter_error(:read_revision, error)
+
+  defp rollback_path_error(path, error) when is_binary(error) do
+    if String.contains?(error, "pathspec") or
+         String.contains?(error, "did not match any file") or
+         String.contains?(error, "does not exist in") do
+      Errors.FileNotFound.exception(file_path: path)
+    else
+      adapter_error(:rollback, %{path: path, reason: error})
+    end
+  end
+
+  defp rollback_path_error(path, error),
+    do: adapter_error(:rollback, %{path: path, reason: error})
+
+  defp adapter_error(operation, reason) do
+    Errors.AdapterError.exception(
+      adapter: __MODULE__,
+      reason: %{operation: operation, reason: normalize_error_reason(reason)}
+    )
+  end
+
+  defp normalize_error_reason(%{__exception__: true} = exception),
+    do: Exception.message(exception)
+
+  defp normalize_error_reason(reason), do: reason
+end

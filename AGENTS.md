@@ -1,51 +1,31 @@
-# AGENTS.md - Jido.Workspace
+# Jido.Workspace
 
-## Project Overview
+`jido_workspace` contains the Workspace API, Shell sessions, and VFS adapters.
+Keep their module boundaries within the single OTP application.
 
-Jido.Workspace provides a unified artifact workspace for agent sessions.
-It uses `jido_shell` for workspace/session orchestration and `jido_vfs` for
-filesystem adapter support.
+- `Jido.Workspace` manages workspaces, access policy, mounted files, and Shell sessions.
+- `Jido.VFS` provides storage adapters and atomic InMemory captures.
+- `Jido.Shell` runs commands over mounted filesystems.
+- `Jido.Workspace.Sandbox` manages execution environments and services.
+- `Jido.Workspace.Deploy` manages deployment plans and transitions.
 
-## Core Responsibilities
+Use `Jido.Workspace.open/1` and `close/1` to manage a live workspace. Use
+`capture/1` and revision-checked `replace/3` to work with captured content.
+See the [README](README.md) for the full file and execution APIs.
 
-- Mount and manage workspace filesystems through `Jido.Shell.VFS`
-- Provide a simple artifact API (`write`, `read`, `list`, `mkdir`, `delete`)
-- Support snapshot/restore of workspace artifacts
-- Optionally run shell commands in a workspace-bound session
+## Checks
 
-## Out of Scope
+- `mix test` runs the default suites.
+- `mix test.integration` runs the isolated Workspace examples.
+- `mix quality` runs format, compile, lint, type, and documentation checks.
+- `mix test.coverage` combines coverage from the default suites, Workspace
+  examples, and local VFS adapter integration tests.
+- `mix hex.build` builds the local package artifact.
 
-- Provider orchestration and adapter policy
-- Harness runtime bootstrap/validation logic
-- Sprite workflow orchestration scenarios
+## Scope
 
-## Common Commands
+Keep provider orchestration, harness runtime policy, and Sprite workflows in
+the host application. Keep Jido integration in test scope.
 
-- `mix test` - Run tests
-- `mix quality` - Run all quality checks
-- `mix coveralls` - Run tests with coverage
-
-## Public API
-
-- `Jido.Workspace.new/1` - Create and mount a workspace
-- `Jido.Workspace.write/3` - Write artifact content
-- `Jido.Workspace.read/2` - Read artifact content
-- `Jido.Workspace.list/2` - List entries
-- `Jido.Workspace.delete/2` - Delete artifact path
-- `Jido.Workspace.mkdir/2` - Create directory
-- `Jido.Workspace.snapshot/1` - Capture workspace snapshot
-- `Jido.Workspace.restore/2` - Restore snapshot
-- `Jido.Workspace.start_session/2` - Start shell session
-- `Jido.Workspace.run/3` - Run shell command
-- `Jido.Workspace.stop_session/1` - Stop shell session
-- `Jido.Workspace.close/1` - Stop session and unmount workspace
-
-## Architecture
-
-- `Jido.Workspace` - Public API module
-- `Jido.Workspace.Workspace` - Core workspace struct and operations
-- `Jido.Workspace.Schemas` - Zoi validation schemas
-
-## Release Hygiene
-
-- Do not modify `CHANGELOG.md`; release notes are generated from Git history during release, so keep changes focused on proper Conventional Commits.
+See [imported source revisions](docs/source-imports.md) for provenance.
+Do not edit `CHANGELOG.md`. The release workflow generates it from Git history.

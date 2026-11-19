@@ -1,8 +1,8 @@
 # Jido Workspace
 
-A local package for agent working files, execution environments, deployment,
-and policy. VFS and Shell remain separate packages. Source history remains in
-BeamWeaver.
+An Elixir package for agent working files, execution environments, deployment,
+and policy. One dependency supplies the Workspace, Shell, and VFS APIs.
+Source history remains in BeamWeaver.
 
 See [the API proposal](API_SPEC.md) for contracts, Action and Signal boundaries,
 and the migration plan. This package is unreleased. API changes apply directly
@@ -51,13 +51,14 @@ Jido Signals. Its Actions and Signal adapter remain test-only. No model is used.
 | `Jido.Workspace.Deploy.OTP` | OTP release handling and explicit state migration |
 | `Jido.Workspace.Deploy.Source` | Source projection, activation, and service restart |
 | `Jido.Workspace.Policy` | Permission checks used by Workspace controllers |
-| `Jido.VFS` dependency | Storage adapters and atomic file captures |
-| `Jido.Shell` dependency | Shell sessions and command execution |
+| `Jido.VFS` | Storage adapters and atomic file captures |
+| `Jido.Shell` | Shell sessions and command execution |
 
-All Elixir source is under `lib/jido_workspace/`, except the public facade at
-`lib/jido_workspace.ex`. The target-side OTP control module is in `src/`.
-Sandbox and Deploy retain separate registries, supervisors, and tests.
-They share one OTP application, `:jido_workspace`.
+One OTP application, `:jido_workspace`, starts the VFS registry, Shell
+supervision tree, and Workspace services. Sandbox and Deploy have separate
+registries and supervisors. The target-side OTP control module is in `src/`.
+See the [VFS guide](docs/vfs/README.md), [Shell guide](docs/shell/README.md),
+and [imported source revisions](docs/source-imports.md).
 
 An in-memory workspace and an OS environment are explicit, separate resources.
 Opening one does not open the other. Deploy takes an Sandbox handle.
@@ -212,9 +213,22 @@ backend module and session PID as owner, `path: :unknown`, and
 `revision: :unavailable`. A local VFS revision cannot prove the state of remote
 files. These backends accept `files: :current` and refuse pinned file views.
 
-## Dependency checkouts
+## Use from another project
 
-When sibling `jido_shell/` and `jido_vfs/` folders contain Mix projects, this
-package uses them as local dependencies. Without those folders, it uses the
-upstream Git revisions recorded in `mix.exs`. This supports both local stack
-work and standalone CI checkouts.
+This package is unreleased. For local development, point your application
+at a Workspace checkout:
+
+```elixir
+{:jido_workspace, path: "../jido_workspace"}
+```
+
+Use the single dependency above for all three APIs. Remove separate
+`jido_shell` and `jido_vfs` dependencies from the same project to avoid duplicate
+modules. The host can keep Jido as its own dependency. Workspace uses it in tests.
+
+Configure GitHub VFS credentials and custom Shell guardrails under
+`:jido_workspace` with the keys `:github` and `:guardrail_rules`. The old
+application keys remain fallbacks through the import.
+
+The [asset lifecycle proposal](docs/workspace-asset-lifecycle.md) describes
+how a later Workspace API could save and reopen files across restarts.

@@ -30,7 +30,11 @@ defmodule Jido.Workspace.MixProject do
       ],
 
       # Dialyzer
-      dialyzer: [plt_local_path: "priv/plts/project.plt", plt_core_path: "priv/plts/core.plt"]
+      dialyzer: [
+        plt_local_path: "priv/plts/project.plt",
+        plt_core_path: "priv/plts/core.plt",
+        plt_add_apps: [:mix]
+      ]
     ]
   end
 
@@ -48,7 +52,7 @@ defmodule Jido.Workspace.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :crypto, :sasl],
+      extra_applications: [:logger, :crypto, :sasl, :ssh, :public_key],
       mod: {Jido.Workspace.Application, []}
     ]
   end
@@ -59,10 +63,19 @@ defmodule Jido.Workspace.MixProject do
   defp deps do
     [
       # Runtime
-      {:zoi, "~> 0.19.0", override: true},
-      {:splode, ">= 0.2.9 and < 0.4.0", override: true},
-      stack_dep(:jido_shell, "f2addc04ca620078f74885cb71f10a7cd29f763e"),
-      stack_dep(:jido_vfs, "eba18f591b66a88efab4aacfd7cd50ab2475efee"),
+      {:zoi, "~> 0.19.0"},
+      {:splode, "~> 0.3.0"},
+      {:jason, "~> 1.4"},
+      {:uniq, "~> 0.6"},
+      {:bash, "~> 0.6.0", optional: true},
+      {:lua, "~> 1.0.0-rc.1"},
+      {:ex_aws, "~> 2.7"},
+      {:ex_aws_s3, "~> 2.2"},
+      {:sweet_xml, "~> 0.6"},
+      {:eternal, "~> 1.2.2"},
+      {:git_cli, "~> 0.3.0"},
+      {:req, "~> 0.6"},
+      {:igniter, "~> 0.7", optional: true},
 
       # Agent boundary checks
       {:jido,
@@ -75,18 +88,11 @@ defmodule Jido.Workspace.MixProject do
       {:doctor, "~> 0.21", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: [:dev, :test]},
       {:git_hooks, "~> 0.8", only: [:dev, :test], runtime: false},
-      {:git_ops, "~> 2.9", only: :dev, runtime: false}
+      {:git_ops, "~> 2.9", only: :dev, runtime: false},
+      {:mimic, "~> 2.0", only: :test},
+      {:stream_data, "~> 1.0", only: [:dev, :test]},
+      {:minio_server, "~> 0.4.0", only: [:dev, :test]}
     ]
-  end
-
-  defp stack_dep(name, ref) do
-    path = "../#{name}"
-
-    if File.regular?(Path.expand("#{path}/mix.exs", __DIR__)) do
-      {name, path: path, override: true}
-    else
-      {name, github: "agentjido/#{name}", ref: ref, override: true}
-    end
   end
 
   defp aliases do
@@ -99,6 +105,7 @@ defmodule Jido.Workspace.MixProject do
         "format --check-formatted",
         "compile --warnings-as-errors",
         "credo --strict",
+        "jido_shell.guardrails",
         "dialyzer",
         "doctor --raise"
       ]
@@ -119,6 +126,10 @@ defmodule Jido.Workspace.MixProject do
         "API_SPEC.md",
         "SANDBOX.md",
         "DEPLOY.md",
+        "docs/shell",
+        "docs/vfs",
+        "docs/source-imports.md",
+        "docs/workspace-asset-lifecycle.md",
         "mix.exs",
         "usage-rules.md"
       ],
@@ -145,6 +156,14 @@ defmodule Jido.Workspace.MixProject do
         "DEPLOY.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",
+        {"docs/shell/README.md", filename: "shell"},
+        "docs/shell/GUARDRAILS.md",
+        "docs/shell/MIGRATION.md",
+        {"docs/vfs/README.md", filename: "vfs"},
+        "docs/vfs/adapter-onboarding-checklist.md",
+        "docs/vfs/jido-agent-integration.md",
+        "docs/source-imports.md",
+        "docs/workspace-asset-lifecycle.md",
         "LICENSE"
       ]
     ]
@@ -180,6 +199,14 @@ defmodule Jido.Workspace.MixProject do
           args
       )
     end
+
+    vfs_examples =
+      Path.wildcard("test/jido_vfs/adapter/{ets,git,in_memory,local}_integration_test.exs")
+
+    coverage_run(
+      ["coveralls.json", "--include", "integration", "--export-coverage", "examples/vfs"] ++
+        vfs_examples ++ args
+    )
 
     coverage_run(["coveralls.json", "--import-cover", output] ++ args)
     coverage_run(["coveralls", "--import-cover", output] ++ args)

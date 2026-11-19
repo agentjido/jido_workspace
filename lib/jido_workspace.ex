@@ -15,7 +15,6 @@ defmodule Jido.Workspace do
   def open(opts \\ []) do
     with :ok <- open_options(opts),
          {:ok, id} <- Schemas.validate_workspace_id(Keyword.get_lazy(opts, :id, &unique_id/0)),
-         {:ok, _} <- Application.ensure_all_started(:jido_shell),
          {:ok, lifetime} <- Lifetime.start(id, Keyword.put_new(opts, :owner, self())) do
       {:ok, %Workspace{id: id, lifetime: lifetime}}
     else

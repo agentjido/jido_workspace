@@ -35,4 +35,6 @@ if config_env() == :dev do
 end
 
 # Import environment specific config
-import_config "#{config_env()}.exs"
+if config_env() in [:dev, :test] do
+  import_config "#{config_env()}.exs"
+end
