@@ -15,11 +15,11 @@ defmodule Jido.Workspace.Execution do
 
   @type t :: %__MODULE__{
           id: String.t(),
-          command: String.t(),
+          command: String.t() | [String.t(), ...],
           status: :exited | :timed_out | :cancelled,
           exit_status: integer() | nil,
-          files: Jido.Workspace.FileView.t(),
-          after_files: Jido.Workspace.FileView.t() | {:error, Jido.Workspace.Error.t()},
+          files: Jido.Workspace.FileView.t() | nil,
+          after_files: Jido.Workspace.FileView.t() | {:error, Jido.Workspace.Error.t()} | nil,
           duration_ms: non_neg_integer(),
           output: binary(),
           truncated: boolean()

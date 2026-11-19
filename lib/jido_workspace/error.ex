@@ -59,6 +59,36 @@ defmodule Jido.Workspace.Error do
   defp classify(:already_exists), do: {:already_exists, "The path already exists."}
   defp classify(:directory_not_empty), do: {:directory_not_empty, "The directory is not empty."}
   defp classify(:not_directory), do: {:not_directory, "The path is not a directory."}
+  defp classify(:enoent), do: classify(:not_found)
+  defp classify(:eexist), do: classify(:already_exists)
+  defp classify(:enotempty), do: classify(:directory_not_empty)
+  defp classify(:enotdir), do: classify(:not_directory)
+  defp classify(:busy), do: {:busy, "The workspace is busy."}
+
+  defp classify(:unknown_profile),
+    do: {:unknown_profile, "The host has no profile with this name."}
+
+  defp classify(:invalid_profile), do: {:invalid_profile, "The workspace profile is invalid."}
+
+  defp classify(:invalid_snapshot),
+    do: {:invalid_snapshot, "The saved file tree failed validation."}
+
+  defp classify(:snapshot_store_unconfigured),
+    do: {:snapshot_store_unconfigured, "The profile has no configured snapshot store."}
+
+  defp classify(:snapshot_too_large),
+    do: {:snapshot_too_large, "The saved tree exceeds the store limits."}
+
+  defp classify(:cleanup_unconfirmed),
+    do: {:cleanup_unconfirmed, "Workspace could not confirm resource cleanup."}
+
+  defp classify(:quiescence_unknown),
+    do: {:quiescence_unknown, "Workspace could not confirm that writers have stopped."}
+
+  defp classify(:unsupported_capability),
+    do: {:unsupported_capability, "The backend does not support this operation."}
+
+  defp classify({:unsupported_capability, _}), do: classify(:unsupported_capability)
   defp classify({:policy_denied, _}), do: {:policy_denied, "The policy refused the operation."}
 
   defp classify({kind, _}) when kind in [:invalid_path, :invalid_workspace_id, :invalid_command],

@@ -19,7 +19,10 @@ defmodule Jido.Workspace.Sandbox do
 
   @doc "Creates a sandbox with an owned directory, backend, and fixed policy."
   def open(opts \\ []) do
-    with :ok <- Jido.Workspace.Policy.validate(Keyword.get(opts, :policy, :full_access)),
+    owner = Keyword.get(opts, :owner)
+
+    with true <- is_nil(owner) or is_pid(owner),
+         :ok <- Jido.Workspace.Policy.validate(Keyword.get(opts, :policy, :full_access)),
          {:ok, backend, backend_opts} <- Jido.Workspace.Sandbox.Backend.resolve(opts) do
       id = Base.encode16(:crypto.strong_rand_bytes(12), case: :lower)
 
@@ -28,13 +31,14 @@ defmodule Jido.Workspace.Sandbox do
 
       spec =
         {Jido.Workspace.Sandbox.Server,
-         {id, root, Keyword.get(opts, :policy, :full_access), backend, backend_opts}}
+         {id, root, Keyword.get(opts, :policy, :full_access), backend, backend_opts, owner}}
 
       case DynamicSupervisor.start_child(Jido.Workspace.Sandbox.Supervisor, spec) do
         {:ok, pid} -> GenServer.call(pid, :handle)
         {:error, reason} -> {:error, reason}
       end
     else
+      false -> {:error, :invalid_input}
       {:error, _} = error -> error
     end
   end

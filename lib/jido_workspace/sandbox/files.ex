@@ -116,29 +116,34 @@ defmodule Jido.Workspace.Sandbox.Files do
   end
 
   @doc "Captures file entries below a checked directory. Links are optional."
-  def capture(root, relative, links \\ false) do
-    with {:ok, directory} <- path(root, relative), do: tree(directory, "", %{}, links)
+  def capture(root, relative, links \\ false, budget \\ :unlimited) do
+    with {:ok, directory} <- path(root, relative),
+         {:ok, {entries, _budget}} <- tree(directory, "", {%{}, budget}, links),
+         do: {:ok, entries}
   end
 
-  defp tree(root, prefix, entries, links) do
+  defp tree(root, prefix, state, links) do
     with {:ok, names} <- File.ls(Path.join(root, prefix)) do
-      Enum.reduce_while(Enum.sort(names), {:ok, entries}, fn name, {:ok, acc} ->
+      Enum.reduce_while(Enum.sort(names), {:ok, state}, fn name, {:ok, {acc, budget}} ->
         relative = if prefix == "", do: name, else: prefix <> "/" <> name
         full = Path.join(root, relative)
 
         result =
-          with {:ok, stat} <- File.lstat(full) do
+          with {:ok, stat} <- File.lstat(full),
+               {:ok, budget} <- reserve(budget, stat) do
             case stat.type do
               :directory ->
                 acc = if links, do: Map.put(acc, relative, %{type: :directory}), else: acc
-                tree(root, relative, acc, links)
+                tree(root, relative, {acc, budget}, links)
 
               :regular ->
-                read_file(full, relative, stat, acc)
+                with {:ok, next} <- read_file(full, relative, stat, acc),
+                     do: {:ok, {next, budget}}
 
               :symlink when links ->
                 with {:ok, target} <- File.read_link(full),
-                     do: {:ok, Map.put(acc, relative, %{type: :symlink, target: target})}
+                     do:
+                       {:ok, {Map.put(acc, relative, %{type: :symlink, target: target}), budget}}
 
               _ ->
                 {:error, {:unsupported_file, relative}}
@@ -151,6 +156,16 @@ defmodule Jido.Workspace.Sandbox.Files do
         end
       end)
     end
+  end
+
+  defp reserve(:unlimited, _), do: {:ok, :unlimited}
+
+  defp reserve({entries, bytes}, stat) do
+    size = if stat.type == :regular, do: stat.size, else: 0
+
+    if entries > 0 and size <= bytes,
+      do: {:ok, {entries - 1, bytes - size}},
+      else: {:error, :snapshot_too_large}
   end
 
   defp read_file(full, relative, stat, entries) do

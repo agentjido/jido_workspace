@@ -7,8 +7,9 @@ defmodule Jido.Workspace.Sandbox.Server do
 
   def start_link(args), do: GenServer.start_link(__MODULE__, args)
 
-  def init({id, root, policy, backend, opts}) do
+  def init({id, root, policy, backend, opts, owner}) do
     Process.flag(:trap_exit, true)
+    owner_monitor = if is_pid(owner), do: Process.monitor(owner)
     sandbox = %Sandbox{id: id, root: root, pid: self()}
 
     case File.mkdir(root) do
@@ -26,6 +27,7 @@ defmodule Jido.Workspace.Sandbox.Server do
                capabilities: capabilities,
                services: %{},
                deployments: %{},
+               owner_monitor: owner_monitor,
                policy: policy,
                case_sensitive: Files.case_sensitive?(root)
              }}
@@ -263,8 +265,25 @@ defmodule Jido.Workspace.Sandbox.Server do
     end
   end
 
+  def handle_info({:DOWN, ref, :process, _, _}, %{owner_monitor: ref} = state) do
+    release_owner_resources(state)
+  end
+
+  def handle_info(:release_owner_resources, state), do: release_owner_resources(state)
+
   def handle_info(_, state), do: {:noreply, state}
   def terminate(_, state), do: cleanup(state)
+
+  defp release_owner_resources(state) do
+    with :ok <- cleanup(state), {:ok, _} <- File.rm_rf(state.sandbox.root) do
+      {:stop, :normal, %{state | services: %{}}}
+    else
+      _ ->
+        Registry.unregister(Jido.Workspace.Sandbox.Registry, state.sandbox.id)
+        Process.send_after(self(), :release_owner_resources, 5_000)
+        {:noreply, state}
+    end
+  end
 
   defp cleanup(state) do
     results =

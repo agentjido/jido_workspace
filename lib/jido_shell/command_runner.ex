@@ -38,6 +38,9 @@ defmodule Jido.Shell.CommandRunner do
     end
   end
 
+  @doc false
+  def execute_argv(state, [command | args], emit), do: execute_command(state, command, args, emit)
+
   defp parse_program(line) do
     case Parser.parse_program(line) do
       {:ok, _} = ok ->

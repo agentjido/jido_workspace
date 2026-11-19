@@ -41,6 +41,7 @@ defmodule Jido.Workspace.MixProject do
   def cli do
     [
       preferred_envs: [
+        "test.examples": :test,
         "test.coverage": :test,
         coveralls: :test,
         "coveralls.github": :test,
@@ -98,6 +99,7 @@ defmodule Jido.Workspace.MixProject do
   defp aliases do
     [
       setup: ["deps.get", "git_hooks.install"],
+      "test.examples": &examples/1,
       "test.integration": &integration/1,
       "test.coverage": &coverage/1,
       q: ["quality"],
@@ -169,8 +171,15 @@ defmodule Jido.Workspace.MixProject do
     ]
   end
 
+  defp examples(args) do
+    Mix.Task.run(
+      "test",
+      numbered_example_files() ++ ["--include", "integration" | args]
+    )
+  end
+
   defp integration(args) do
-    for file <- Path.wildcard("test/examples/**/*_test.exs") do
+    for file <- integration_example_files() do
       {_, status} =
         System.cmd("mix", ["test", file, "--include", "integration"] ++ args,
           into: IO.stream(),
@@ -186,7 +195,7 @@ defmodule Jido.Workspace.MixProject do
     File.rm_rf!(output)
     File.mkdir_p!(output)
 
-    for {file, index} <- Enum.with_index(Path.wildcard("test/examples/**/*_test.exs")) do
+    for {file, index} <- Enum.with_index(integration_example_files()) do
       coverage_run(
         [
           "coveralls.json",
@@ -221,4 +230,10 @@ defmodule Jido.Workspace.MixProject do
 
     if status != 0, do: Mix.raise("Coverage test run failed")
   end
+
+  defp integration_example_files do
+    numbered_example_files() ++ Path.wildcard("test/examples/**/*_test.exs")
+  end
+
+  defp numbered_example_files, do: Path.wildcard("examples/**/*_test.exs")
 end

@@ -1,21 +1,38 @@
 defmodule Jido.Workspace do
   @moduledoc """
-  Working files, immutable captures, and virtual Shell commands.
+  Working files, command execution, and durable snapshots.
 
   Keep the same handle for the resource lifetime. The controller owns storage,
   policy, and session state. File changes and session stop return `:ok`.
   All failures return `Jido.Workspace.Error`.
+
+  Use paths relative to the root on a profiled workspace and absolute paths on
+  a workspace opened without a profile.
   """
-  alias Jido.Workspace.{Entry, Error, Execution, Info, Lifetime, Schemas, Workspace}
+  alias Jido.Workspace.{Entry, Error, Execution, Info, Lifetime, Profile, ProfileSession}
+  alias Jido.Workspace.{Schemas, Snapshot, SnapshotStore, Workspace}
+
+  @legacy_options [:id, :owner, :policy, :adapter, :adapter_opts, :session_opts, :start_session]
+  @profile_options [:id, :owner, :profile, :from]
+  @run_options Zoi.keyword(
+                 [
+                   cwd: Zoi.string() |> Zoi.default("."),
+                   timeout_ms:
+                     Zoi.integer() |> Zoi.min(1) |> Zoi.max(60_000) |> Zoi.default(30_000),
+                   output_limit:
+                     Zoi.integer() |> Zoi.min(0) |> Zoi.max(1_048_576) |> Zoi.default(1_048_576)
+                 ],
+                 unrecognized_keys: :error
+               )
   @type t :: Workspace.t()
   @type mutation_result :: :ok | {:error, Error.t()}
 
-  @doc "Opens a workspace. The caller owns it unless the host supplies `:owner`."
+  @doc "Opens a workspace. Use `profile:` for a named host profile and `from:` for a saved reference."
   @spec open(keyword()) :: {:ok, t()} | {:error, Error.t()}
   def open(opts \\ []) do
     with :ok <- open_options(opts),
          {:ok, id} <- Schemas.validate_workspace_id(Keyword.get_lazy(opts, :id, &unique_id/0)),
-         {:ok, lifetime} <- Lifetime.start(id, Keyword.put_new(opts, :owner, self())) do
+         {:ok, lifetime} <- start(id, Keyword.put_new(opts, :owner, self())) do
       {:ok, %Workspace{id: id, lifetime: lifetime}}
     else
       {:error, reason} -> error(:open, nil, reason)
@@ -46,11 +63,11 @@ defmodule Jido.Workspace do
   @spec stop_session(t()) :: mutation_result()
   def stop_session(ws), do: call(ws, :stop_session, :stop_session)
 
-  @doc "Reads file bytes at an absolute path."
+  @doc "Reads file bytes."
   @spec read(t(), String.t()) :: {:ok, binary()} | {:error, Error.t()}
   def read(ws, path), do: file(ws, path, :read, :read_file, [])
 
-  @doc "Writes iodata at an absolute path."
+  @doc "Writes iodata to a file."
   @spec write(t(), String.t(), iodata()) :: mutation_result()
   def write(ws, path, content) do
     with {:ok, bytes} <- bytes(content) do
@@ -60,17 +77,22 @@ defmodule Jido.Workspace do
     end
   end
 
-  @doc "Creates a directory at an absolute path."
+  @doc "Creates a directory."
   @spec mkdir(t(), String.t()) :: mutation_result()
   def mkdir(ws, path), do: file(ws, path, :mkdir, :mkdir, [])
 
-  @doc "Deletes a file or an empty directory at an absolute path."
+  @doc "Deletes a file or an empty directory."
   @spec delete(t(), String.t()) :: mutation_result()
   def delete(ws, path), do: file(ws, path, :delete, :delete, [])
 
   @doc "Lists entries in path order. Unknown metadata is nil."
   @spec list(t(), String.t()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
-  def list(ws, path \\ "/") do
+  def list(%Workspace{lifetime: {:profile, _}} = ws), do: list(ws, ".")
+  def list(ws), do: list(ws, "/")
+
+  def list(%Workspace{lifetime: {:profile, _}} = ws, path), do: profile_file(ws, :list, path, [])
+
+  def list(ws, path) do
     with {:ok, path} <- validate_path(path),
          {:ok, entries} <- call(ws, {:file, :list_dir, [path]}, :list) do
       {:ok,
@@ -94,6 +116,11 @@ defmodule Jido.Workspace do
   @spec capture(t()) :: {:ok, Jido.VFS.Capture.t(), term()} | {:error, Error.t()}
   def capture(ws), do: call(ws, :capture, :capture)
 
+  @doc "Saves a profiled workspace to its configured store and returns a durable reference."
+  @spec save(t()) :: {:ok, Snapshot.t()} | {:error, Error.t()}
+  def save(%Workspace{lifetime: {:profile, _}} = ws), do: call(ws, :save, :save)
+  def save(ws), do: error(:save, ws.id, :unsupported_capability)
+
   @doc "Replaces files only when the expected revision still identifies current content."
   @spec replace(t(), Jido.VFS.Capture.t(), keyword()) :: {:ok, term()} | {:error, Error.t()}
   def replace(ws, capture, opts) do
@@ -110,12 +137,27 @@ defmodule Jido.Workspace do
   def file_view(ws), do: call(ws, :file_view, :file_view)
 
   @doc """
-  Runs a virtual Shell command. Returns an Execution, including nonzero exits.
-  Options: `files`, `timeout_ms` (30000), `output_limit` (1048576), and
-  `execution_context`. A file view is a check before execution, not a lock.
+  Runs argv on a profiled workspace. Options are `cwd:`, `timeout_ms:`, and
+  `output_limit:`. A workspace opened without a profile takes a virtual Shell
+  command string and also accepts `files:` and `execution_context:`.
   """
-  @spec run(t(), String.t(), keyword()) :: {:ok, Execution.t()} | {:error, Error.t()}
-  def run(ws, command, opts \\ []) do
+  @spec run(t(), String.t() | [String.t(), ...], keyword()) ::
+          {:ok, Execution.t()} | {:error, Error.t()}
+  def run(ws, command, opts \\ [])
+
+  def run(%Workspace{lifetime: {:profile, _}} = ws, command, opts) do
+    with [tool | _] when is_binary(tool) and byte_size(tool) > 0 <- command,
+         true <- valid_arguments?(command),
+         true <- Keyword.keyword?(opts) and unique_keys?(opts),
+         {:ok, opts} <- Zoi.parse(@run_options, opts),
+         true <- Schemas.relative_path?(Keyword.fetch!(opts, :cwd)) do
+      call(ws, {:profile_run, command, Map.new(opts)}, :run)
+    else
+      _ -> error(:run, ws.id, :invalid_input)
+    end
+  end
+
+  def run(ws, command, opts) do
     with :ok <- command_options(command, opts),
          {:ok, command} <- Schemas.validate_command(command),
          {:ok, id, pid, view} <-
@@ -128,7 +170,7 @@ defmodule Jido.Workspace do
     end
   end
 
-  @doc "Closes storage and the session. Repeated close returns `:ok`."
+  @doc "Closes storage and the session. A profiled workspace releases its owned runtime."
   @spec close(t()) :: mutation_result()
   def close(ws) do
     case call(ws, :close, :close) do
@@ -136,6 +178,9 @@ defmodule Jido.Workspace do
       result -> result
     end
   end
+
+  defp file(%Workspace{lifetime: {:profile, _}} = ws, path, operation, _request, args),
+    do: profile_file(ws, operation, path, args)
 
   defp file(ws, path, operation, request, args) do
     with {:ok, path} <- validate_path(path) do
@@ -145,12 +190,22 @@ defmodule Jido.Workspace do
     end
   end
 
+  defp profile_file(ws, operation, path, args) do
+    if Schemas.relative_path?(path) and (path != "." or operation == :list),
+      do: call(ws, {:profile_file, operation, [path | args]}, operation),
+      else: error(operation, ws.id, :invalid_input)
+  end
+
   defp call(%Workspace{} = ws, request, operation) do
-    case Lifetime.call(ws.lifetime, request) do
+    case request(ws.lifetime, request) do
+      {:error, %Error{} = reason} -> {:error, %{reason | operation: operation, resource: ws.id}}
       {:error, reason} -> error(operation, ws.id, reason)
       result -> result
     end
   end
+
+  defp request({:profile, pid}, message), do: ProfileSession.call(pid, message)
+  defp request(pid, message), do: Lifetime.call(pid, message)
 
   defp error(operation, resource, reason),
     do: {:error, Error.from_reason(operation, resource, reason)}
@@ -171,11 +226,47 @@ defmodule Jido.Workspace do
 
   defp open_options(opts) do
     if Keyword.keyword?(opts) and is_pid(Keyword.get(opts, :owner, self())) and
-         Keyword.keyword?(Keyword.get(opts, :adapter_opts, [])) and
-         Keyword.keyword?(Keyword.get(opts, :session_opts, [])),
+         unique_keys?(opts) and known_open_options?(opts),
        do: :ok,
        else: {:error, :invalid_input}
   end
+
+  defp known_open_options?(opts) do
+    if Keyword.has_key?(opts, :profile) do
+      Keyword.keys(opts) -- @profile_options == []
+    else
+      Keyword.keys(opts) -- @legacy_options == [] and
+        Keyword.keyword?(Keyword.get(opts, :adapter_opts, [])) and
+        Keyword.keyword?(Keyword.get(opts, :session_opts, []))
+    end
+  end
+
+  defp start(id, opts) do
+    case Keyword.fetch(opts, :profile) do
+      {:ok, name} ->
+        with {:ok, profile} <- Profile.fetch(name),
+             {:ok, capture} <- load_snapshot(profile, Keyword.fetch(opts, :from)),
+             {:ok, pid} <- ProfileSession.start({id, opts[:owner], profile, capture}) do
+          {:ok, {:profile, pid}}
+        end
+
+      :error ->
+        Lifetime.start(id, opts)
+    end
+  end
+
+  defp load_snapshot(_, :error), do: {:ok, nil}
+
+  defp load_snapshot(profile, {:ok, snapshot}),
+    do: SnapshotStore.fetch(Map.get(profile, :store), snapshot)
+
+  defp valid_arguments?([arg | rest]) when is_binary(arg),
+    do: String.valid?(arg) and not String.contains?(arg, <<0>>) and valid_arguments?(rest)
+
+  defp valid_arguments?([]), do: true
+  defp valid_arguments?(_), do: false
+
+  defp unique_keys?(opts), do: Keyword.keys(opts) == Enum.uniq(Keyword.keys(opts))
 
   defp command_options(command, opts) do
     if is_binary(command) and String.valid?(command) and not String.contains?(command, <<0>>) and

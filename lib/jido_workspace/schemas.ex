@@ -89,6 +89,32 @@ defmodule Jido.Workspace.Schemas do
     end
   end
 
+  @doc "Checks a canonical workspace-relative path. A single dot names the root."
+  def relative_path?("."), do: true
+
+  def relative_path?(path) when is_binary(path) and byte_size(path) in 1..4096 do
+    String.valid?(path) and Jido.VFS.RelativePath.relative?(path) and
+      not String.contains?(path, ["\\", <<0>>]) and
+      Enum.all?(String.split(path, "/"), &(&1 not in ["", ".", ".."]))
+  end
+
+  def relative_path?(_), do: false
+
+  @doc false
+  def durable_id_schema do
+    Zoi.string()
+    |> Zoi.min(1)
+    |> Zoi.max(1024)
+    |> Zoi.refine(&__MODULE__.validate_durable_id/1)
+  end
+
+  @doc false
+  def validate_durable_id(id) do
+    if String.valid?(id) and String.trim(id) != "" and not String.contains?(id, <<0>>),
+      do: :ok,
+      else: {:error, "identifier must be nonblank UTF-8 text"}
+  end
+
   defp traversal?(path) do
     path
     |> String.split("/", trim: true)
