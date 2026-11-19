@@ -10,25 +10,40 @@ defmodule Jido.Workspace.Examples.PersistedReportTest do
   alias Jido.Workspace.Examples.PersistedReport
 
   test "a fresh BEAM uses a JSON-decoded reference to restore bytes and an empty directory",
-       ctx do
+       %{tmp_dir: root} do
     report = <<"Report from another BEAM\n", 0, 255>>
-    assert {:ok, snapshot} = in_fresh_beam(ctx.tmp_dir, :export, [:report, report])
-    reference = snapshot |> Jason.encode!() |> Jason.decode!()
+    reference = Path.join(root, "report.json")
+    assert {:ok, _snapshot} = in_fresh_beam(root, :export, [:memory, report, reference])
 
     assert {:ok, %{report: ^report, empty_entries: []}} =
-             in_fresh_beam(ctx.tmp_dir, :restore, [:report, reference])
+             in_fresh_beam(root, :restore, [:memory, reference])
   end
 
-  test "corruption of a later save leaves the previous reference usable", ctx do
-    assert {:ok, first} = in_fresh_beam(ctx.tmp_dir, :export, [:report, "Original report"])
-    assert {:ok, second} = in_fresh_beam(ctx.tmp_dir, :export, [:report, "Updated report"])
-    File.write!(Path.join(ctx.tmp_dir, second.digest), "corrupt bundle")
+  if System.get_env("JIDO_SANDBOX_DOCKER") != "1" do
+    @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to reopen a memory snapshot in Docker"
+  end
+
+  test "a fresh BEAM can reopen the saved memory tree in Docker", %{tmp_dir: root} do
+    report = "Report for Docker\n"
+    reference = Path.join(root, "report.json")
+    assert {:ok, _snapshot} = in_fresh_beam(root, :export, [:memory, report, reference])
+
+    assert {:ok, %{report: ^report, empty_entries: []}} =
+             in_fresh_beam(root, :restore, [:docker, reference])
+  end
+
+  test "corruption of a later save leaves the previous reference usable", %{tmp_dir: root} do
+    first = Path.join(root, "first.json")
+    second = Path.join(root, "second.json")
+    assert {:ok, _snapshot} = in_fresh_beam(root, :export, [:memory, "Original report", first])
+    assert {:ok, snapshot} = in_fresh_beam(root, :export, [:memory, "Updated report", second])
+    File.write!(Path.join(store(root), snapshot.digest), "corrupt bundle")
 
     assert {:error, %Error{code: :invalid_snapshot}} =
-             in_fresh_beam(ctx.tmp_dir, :restore, [:report, second])
+             in_fresh_beam(root, :restore, [:memory, second])
 
     assert {:ok, %{report: "Original report"}} =
-             in_fresh_beam(ctx.tmp_dir, :restore, [:report, first])
+             in_fresh_beam(root, :restore, [:memory, first])
   end
 
   defp in_fresh_beam(root, operation, args) do
@@ -50,10 +65,26 @@ defmodule Jido.Workspace.Examples.PersistedReportTest do
   end
 
   defp configure(peer, root) do
-    profiles = %{report: %{provider: :memory, policy: :full_access, store: "reports"}}
+    profiles = %{
+      memory: %{provider: :memory, policy: :full_access, store: "reports"},
+      docker: %{
+        provider: :docker,
+        policy: :full_access,
+        image: System.get_env("JIDO_SANDBOX_IMAGE", "alpine:latest"),
+        store: "reports",
+        require: %{isolation: :container, network: :disabled}
+      }
+    }
+
     :ok = :peer.call(peer, Application, :put_env, [:jido_workspace, :profiles, profiles])
 
     :ok =
-      :peer.call(peer, Application, :put_env, [:jido_workspace, :stores, %{"reports" => root}])
+      :peer.call(peer, Application, :put_env, [
+        :jido_workspace,
+        :stores,
+        %{"reports" => store(root)}
+      ])
   end
+
+  defp store(root), do: Path.join(root, "snapshots")
 end

@@ -1,16 +1,16 @@
-defmodule Jido.Workspace.Examples.NativeReport do
-  @moduledoc "Use the Sandbox file API and a native command on the same directory."
+defmodule Jido.Workspace.Examples.ProfiledReport do
+  @moduledoc "Run the same report with a host-selected provider profile."
 
-  alias Jido.Workspace.Sandbox
+  alias Jido.Workspace
+  alias Jido.Workspace.Examples.Report
 
-  def run(sandbox, input) do
-    with :ok <- Sandbox.write(sandbox, "reports/input data.txt", input),
-         {:ok, %{exit_status: 0}} <-
-           Sandbox.exec(sandbox, "/bin/cp", ["input data.txt", "output data.txt"], dir: "reports") do
-      Sandbox.read(sandbox, "reports/output data.txt")
-    else
-      {:ok, %{exit_status: _} = execution} -> {:error, execution}
-      error -> error
+  def run(profile, input) do
+    with {:ok, workspace} <- Workspace.open(profile: profile) do
+      try do
+        Report.run(workspace, input)
+      after
+        Workspace.close(workspace)
+      end
     end
   end
 end

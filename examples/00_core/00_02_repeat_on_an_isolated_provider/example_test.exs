@@ -1,49 +1,41 @@
+Code.require_file("../00_01_work_on_one_tree/example.ex", __DIR__)
 Code.require_file("example.ex", __DIR__)
 
-defmodule Jido.Workspace.Examples.NativeReportTest do
+defmodule Jido.Workspace.Examples.ProfiledReportTest do
   use ExUnit.Case, async: false
   @moduletag :integration
 
-  alias Jido.Workspace.Examples.NativeReport
-  alias Jido.Workspace.Sandbox
-  alias Jido.Workspace.Sandbox.Backends.Docker
+  alias Jido.Workspace.Examples.ProfiledReport
 
-  @tag :tmp_dir
-  test "the native program and file API share one directory on the trusted local runner", ctx do
-    exercise([provider: :local], ctx.tmp_dir)
+  setup do
+    previous = Application.fetch_env(:jido_workspace, :profiles)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:jido_workspace, :profiles, value)
+        :error -> Application.delete_env(:jido_workspace, :profiles)
+      end
+    end)
+
+    Application.put_env(:jido_workspace, :profiles, %{
+      memory: %{provider: :memory, policy: :full_access},
+      docker: %{
+        provider: :docker,
+        policy: :full_access,
+        image: System.get_env("JIDO_SANDBOX_IMAGE", "alpine:latest"),
+        require: %{isolation: :container, network: :disabled}
+      }
+    })
   end
 
   if System.get_env("JIDO_SANDBOX_DOCKER") != "1" do
-    @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to prove the isolated native path"
+    @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to repeat the memory workflow on Docker"
   end
 
-  @tag :tmp_dir
-  test "the same native workflow runs in an isolated container", ctx do
-    image = System.get_env("JIDO_SANDBOX_IMAGE", "alpine:latest")
-    runtime = System.get_env("JIDO_SANDBOX_RUNTIME", "runc")
+  test "memory and Docker run the same Workspace workflow" do
+    input = "Report for today\n"
 
-    assert %{network: :disabled, cancellation: :container, runtime: ^runtime} =
-             exercise([backend: {Docker, [image: image, runtime: runtime]}], ctx.tmp_dir)
-  end
-
-  defp exercise(options, temporary_directory) do
-    root = Path.join(temporary_directory, "sandbox")
-    assert {:ok, sandbox} = Sandbox.open([root: root] ++ options)
-
-    capabilities =
-      try do
-        assert {:ok, "Report for today\n"} = NativeReport.run(sandbox, "Report for today\n")
-
-        assert :ok = Sandbox.close(sandbox)
-        assert {:ok, _attached} = Sandbox.attach(sandbox.id)
-        assert File.dir?(root)
-        Sandbox.capabilities(sandbox)
-      after
-        assert :ok = Sandbox.destroy(sandbox)
-      end
-
-    refute File.exists?(root)
-    assert {:error, :not_found} = Sandbox.attach(sandbox.id)
-    capabilities
+    assert {:ok, ^input} = ProfiledReport.run(:memory, input)
+    assert {:ok, ^input} = ProfiledReport.run(:docker, input)
   end
 end

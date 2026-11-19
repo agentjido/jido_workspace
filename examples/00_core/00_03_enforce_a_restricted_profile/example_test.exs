@@ -5,115 +5,117 @@ defmodule Jido.Workspace.Examples.RestrictedReportTest do
   @moduletag :integration
   @moduletag :tmp_dir
 
-  alias Jido.VFS.Adapter
   alias Jido.Workspace
   alias Jido.Workspace.Examples.RestrictedReport
-  alias Jido.Workspace.Sandbox
-  alias Jido.Workspace.Sandbox.Backends.Docker
 
-  test "a read-only Workspace permits reads and refuses writes and commands", %{tmp_dir: root} do
-    path = Path.join(root, "report.txt")
-    File.write!(path, "Approved report")
+  setup %{tmp_dir: root} do
+    author = %{provider: :memory, policy: :full_access, store: "reports"}
 
-    assert {:ok, workspace} =
-             Workspace.open(
-               policy: :read_only,
-               adapter: Adapter.Local,
-               adapter_opts: [prefix: root]
-             )
+    docker = %{
+      provider: :docker,
+      policy: :full_access,
+      image: System.get_env("JIDO_SANDBOX_IMAGE", "alpine:latest"),
+      store: "reports",
+      require: %{isolation: :container, network: :disabled}
+    }
 
-    try do
-      assert %{
-               read: {:ok, "Approved report"},
-               write: {:error, %Workspace.Error{code: :policy_denied}},
-               run: {:error, %Workspace.Error{code: :policy_denied}}
-             } = RestrictedReport.workspace(workspace)
+    configure(:stores, %{"reports" => Path.join(root, "snapshots")})
 
-      assert File.read!(path) == "Approved report"
-    after
-      assert :ok = Workspace.close(workspace)
-    end
+    configure(:profiles, %{
+      author: author,
+      read_only_memory: %{author | policy: :read_only},
+      read_only_docker: %{docker | policy: :read_only},
+      docker: docker,
+      incompatible: Map.put(author, :require, %{isolation: :container}),
+      invalid: %{author | policy: :unknown}
+    })
+
+    :ok
   end
 
-  test "invalid policy or provider selection refuses creation", %{tmp_dir: tmp_dir} do
-    root = Path.join(tmp_dir, "refused")
-    assert {:error, %Workspace.Error{code: :invalid_input}} = Workspace.open(policy: :unknown)
-    assert {:error, :invalid_policy} = Sandbox.open(policy: :unknown, root: root)
-    assert {:error, :unsupported_provider} = Sandbox.open(provider: :unknown, root: root)
-    refute File.exists?(root)
+  test "a read-only memory profile permits reads and refuses writes and commands" do
+    verify_read_only(:read_only_memory, prepare_report())
+  end
+
+  test "invalid profiles and unmet requirements refuse open" do
+    assert {:error, %Workspace.Error{code: :unknown_profile}} =
+             Workspace.open(profile: :missing)
+
+    assert {:error, %Workspace.Error{code: :invalid_profile}} =
+             Workspace.open(profile: :invalid)
+
+    assert {:error, %Workspace.Error{code: :unsupported_capability}} =
+             Workspace.open(profile: :incompatible)
   end
 
   if System.get_env("JIDO_SANDBOX_DOCKER") != "1" do
-    @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to check policy and isolation on Docker"
+    @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to check policy on Docker"
   end
 
-  test "a restricted Sandbox refuses execution and writes before starting a service", ctx do
-    root = Path.join(ctx.tmp_dir, "restricted")
-    assert {:ok, sandbox} = Sandbox.open(root: root, policy: :read_only, backend: docker())
-
-    try do
-      # The host stages the input. The read-only caller uses only the Sandbox API.
-      File.write!(Path.join(root, "report.txt"), "Approved report")
-
-      assert %{
-               read: {:ok, "Approved report"},
-               write: {:error, {:policy_denied, :write}},
-               run: {:error, {:policy_denied, :execute}}
-             } = RestrictedReport.sandbox(sandbox)
-
-      assert {:ok, %{services: services}} = Sandbox.info(sandbox)
-      assert services == %{}
-      assert {:ok, "Approved report"} = Sandbox.read(sandbox, "report.txt")
-    after
-      assert :ok = Sandbox.destroy(sandbox)
-    end
+  test "memory and Docker enforce the same read-only policy on a prepared report" do
+    snapshot = prepare_report()
+    verify_read_only(:read_only_memory, snapshot)
+    verify_read_only(:read_only_docker, snapshot)
   end
 
   if System.get_env("JIDO_SANDBOX_DOCKER") != "1" do
     @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to check filesystem isolation"
   end
 
-  test "native commands can read the owned root but cannot read a sibling fixture", ctx do
-    root = Path.join(ctx.tmp_dir, "sandbox")
-    outside = Path.join(ctx.tmp_dir, "outside.txt")
+  test "a Docker command can read the workspace but cannot read a host fixture", %{tmp_dir: root} do
+    outside = Path.join(root, "outside.txt")
     File.write!(outside, "Outside fixture")
-    assert {:ok, sandbox} = Sandbox.open(root: root, backend: docker())
+
+    assert {:ok, workspace} = Workspace.open(profile: :docker, from: prepare_report())
 
     try do
-      :ok = Sandbox.write(sandbox, "report.txt", "Inside fixture")
+      assert {:ok, %{exit_status: 0, output: "Approved report"}} =
+               Workspace.run(workspace, ["cat", "report.txt"])
 
-      assert {:ok, %{exit_status: 0, output: "Inside fixture"}} =
-               Sandbox.exec(sandbox, "/bin/cat", ["report.txt"])
-
-      assert {:ok, %{exit_status: 1, output: output}} =
-               Sandbox.exec(sandbox, "/bin/cat", [outside])
-
+      assert {:ok, %{exit_status: 1, output: output}} = Workspace.run(workspace, ["cat", outside])
       refute output =~ "Outside fixture"
     after
-      assert :ok = Sandbox.destroy(sandbox)
+      assert :ok = Workspace.close(workspace)
     end
   end
 
-  if System.get_env("JIDO_SANDBOX_DOCKER") != "1" do
-    @tag skip: "Set JIDO_SANDBOX_DOCKER=1 to check failed Docker allocation"
+  defp prepare_report do
+    assert {:ok, workspace} = Workspace.open(profile: :author)
+
+    try do
+      assert :ok = Workspace.write(workspace, "report.txt", "Approved report")
+      assert {:ok, snapshot} = Workspace.save(workspace)
+      snapshot
+    after
+      assert :ok = Workspace.close(workspace)
+    end
   end
 
-  test "an unavailable Docker image leaves no owned directory", %{tmp_dir: tmp_dir} do
-    root = Path.join(tmp_dir, "missing-image")
-    {Docker, options} = docker()
-    name = "jido-workspace-example-" <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
+  defp verify_read_only(profile, snapshot) do
+    assert {:ok, workspace} = Workspace.open(profile: profile, from: snapshot)
 
-    assert {:error, {:image_unavailable, _}} =
-             Sandbox.open(root: root, backend: {Docker, Keyword.put(options, :image, name)})
+    try do
+      assert %{
+               read: {:ok, "Approved report"},
+               write: {:error, %Workspace.Error{code: :policy_denied, operation: :write}},
+               run: {:error, %Workspace.Error{code: :policy_denied, operation: :run}}
+             } = RestrictedReport.check(workspace)
 
-    refute File.exists?(root)
+      assert {:ok, "Approved report"} = Workspace.read(workspace, "report.txt")
+    after
+      assert :ok = Workspace.close(workspace)
+    end
   end
 
-  defp docker do
-    {Docker,
-     [
-       image: System.get_env("JIDO_SANDBOX_IMAGE", "alpine:latest"),
-       runtime: System.get_env("JIDO_SANDBOX_RUNTIME", "runc")
-     ]}
+  defp configure(key, value) do
+    previous = Application.fetch_env(:jido_workspace, key)
+    Application.put_env(:jido_workspace, key, value)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:jido_workspace, key, value)
+        :error -> Application.delete_env(:jido_workspace, key)
+      end
+    end)
   end
 end

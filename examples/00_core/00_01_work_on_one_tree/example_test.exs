@@ -1,22 +1,36 @@
 Code.require_file("example.ex", __DIR__)
 
-defmodule Jido.Workspace.Examples.MemoryReportTest do
+defmodule Jido.Workspace.Examples.ReportTest do
   use ExUnit.Case, async: false
   @moduletag :integration
 
   alias Jido.Workspace
-  alias Jido.Workspace.Examples.MemoryReport
+  alias Jido.Workspace.Examples.Report
 
-  test "virtual commands share working files and the fixed capture survives close" do
+  test "file calls and virtual tools see the same memory tree" do
+    previous = Application.fetch_env(:jido_workspace, :profiles)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:jido_workspace, :profiles, value)
+        :error -> Application.delete_env(:jido_workspace, :profiles)
+      end
+    end)
+
+    Application.put_env(:jido_workspace, :profiles, %{
+      memory: %{provider: :memory, policy: :full_access}
+    })
+
     input = "Report for today\n"
+    assert {:ok, workspace} = Workspace.open(profile: :memory)
 
-    assert {:ok, %{output: ^input, capture: capture, closed_workspace: closed}} =
-             MemoryReport.run(input)
+    try do
+      assert {:ok, ^input} = Report.run(workspace, input)
+    after
+      assert :ok = Workspace.close(workspace)
+    end
 
     assert {:error, %Workspace.Error{code: :closed}} =
-             Workspace.write(closed, "/reports/output.txt", "Refused")
-
-    assert {:ok, ^input} = MemoryReport.captured_output(capture)
-    assert {:ok, ^input} = MemoryReport.reopen(capture)
+             Workspace.read(workspace, "reports/output data.txt")
   end
 end
