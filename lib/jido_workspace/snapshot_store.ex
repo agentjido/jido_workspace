@@ -2,7 +2,7 @@ defmodule Jido.Workspace.SnapshotStore do
   @moduledoc false
 
   alias Jido.VFS.Capture
-  alias Jido.Workspace.{Schemas, Snapshot}
+  alias Jido.Workspace.{Policy, Schemas, Snapshot}
 
   @max_entries 10_000
   @max_bytes 16 * 1024 * 1024
@@ -15,25 +15,24 @@ defmodule Jido.Workspace.SnapshotStore do
          :ok <- validate(entries),
          {:ok, bytes} <- encode(entries),
          {:ok, reference} <- Snapshot.new(store, digest(bytes)),
-         :ok <- File.mkdir_p(root),
-         :ok <- publish(root, reference.digest, bytes) do
+         :ok <- write_bundle(root, reference.digest, bytes) do
       {:ok, reference}
     end
   end
 
   def put(_, _), do: {:error, :snapshot_store_unconfigured}
 
-  def fetch(store, snapshot) do
-    with {:ok, reference} <- parse(snapshot),
-         :ok <- authorize_store(store, reference.store),
-         {:ok, root} <- root(store),
+  def fetch(profile, snapshot) do
+    with :ok <- Policy.authorize(profile.policy, :import),
+         {:ok, reference} <- parse(snapshot),
+         :ok <- authorize_store(Map.get(profile, :store), reference.store),
+         {:ok, root} <- root(reference.store),
          {:ok, bytes} <- read_bundle(Path.join(root, reference.digest)),
          true <- digest(bytes) == reference.digest,
          {:ok, capture} <- decode(bytes) do
-      {:ok, capture}
+      {:ok, reference, capture}
     else
       false -> {:error, :invalid_snapshot}
-      {:error, :enoent} -> {:error, :not_found}
       error -> error
     end
   end
@@ -143,6 +142,15 @@ defmodule Jido.Workspace.SnapshotStore do
 
   defp entry_size(_), do: :error
 
+  defp write_bundle(root, digest, bytes) do
+    with :ok <- File.mkdir_p(root),
+         :ok <- publish(root, digest, bytes) do
+      :ok
+    else
+      {:error, reason} -> store_error(reason)
+    end
+  end
+
   defp publish(root, digest, bytes) do
     nonce = Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
     temporary = Path.join(root, ".pending-" <> nonce)
@@ -166,12 +174,19 @@ defmodule Jido.Workspace.SnapshotStore do
   end
 
   defp read_bundle(path) do
-    case File.open(path, [:read, :binary], &IO.binread(&1, @max_bundle + 1)) do
-      {:ok, bytes} when is_binary(bytes) and byte_size(bytes) <= @max_bundle -> {:ok, bytes}
+    with {:ok, %{type: :regular, size: size}} when size <= @max_bundle <- File.lstat(path),
+         {:ok, bytes} when is_binary(bytes) and byte_size(bytes) <= @max_bundle <-
+           File.open(path, [:read, :binary], &IO.binread(&1, @max_bundle + 1)) do
+      {:ok, bytes}
+    else
+      {:ok, {:error, reason}} -> store_error(reason)
       {:ok, _} -> {:error, :invalid_snapshot}
-      error -> error
+      {:error, :enoent} -> {:error, :not_found}
+      {:error, reason} -> store_error(reason)
     end
   end
+
+  defp store_error(reason), do: {:error, {:snapshot_store_unavailable, reason}}
 
   defp digest(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
 end

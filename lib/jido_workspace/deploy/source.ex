@@ -35,49 +35,55 @@ defmodule Jido.Workspace.Deploy.Source do
          {:ok, preparation} <- commands(target, relative, recipe.prepare),
          :ok <- Snapshot.verify_tracked(plan.artifact.snapshot, target.sandbox, relative) do
       notify.(:prepare, preparation)
-      activate(target, plan, relative, recipe, preparation, notify)
+      deploy(target, plan, relative, recipe, preparation, notify)
     else
       error -> {:error, %{phase: :prepare, reason: error}}
     end
   end
 
-  defp activate(target, plan, relative, recipe, preparation, notify) do
+  defp deploy(target, plan, relative, recipe, preparation, notify) do
+    with {:ok, %{service: service}} <-
+           transition_step(notify, :activate, activate(target, plan, relative, recipe.service)),
+         {:ok, verification} <-
+           transition_step(notify, :verify, commands(target, relative, List.wrap(recipe.verify))) do
+      {:ok,
+       %{
+         phase: :verified,
+         current: "releases/" <> plan.id,
+         service: service,
+         preparation: preparation,
+         verification: verification,
+         state_policy: if(recipe.service, do: :restart, else: :files_only)
+       }}
+    end
+  end
+
+  defp activate(target, plan, relative, service_spec) do
     old_service = read_service(target)
 
-    result =
-      with :ok <- if(recipe.service, do: stop(target, old_service), else: :ok),
-           :ok <-
-             Sandbox.replace_link(
-               target.sandbox,
-               Path.join(target.path, "current"),
-               "releases/" <> plan.id,
-               plan.id
-             ),
-           {:ok, service} <-
-             if(recipe.service,
-               do: start(target, relative, recipe.service),
-               else: {:ok, old_service}
-             ),
-           :ok <- save_service(target, service),
-           _ <- notify.(:activate, %{service: service}),
-           {:ok, verification} <- commands(target, relative, List.wrap(recipe.verify)) do
-        notify.(:verify, verification)
-
-        {:ok,
-         %{
-           phase: :verified,
-           current: "releases/" <> plan.id,
-           service: service,
-           preparation: preparation,
-           verification: verification,
-           state_policy: if(recipe.service, do: :restart, else: :files_only)
-         }}
-      end
-
-    case result do
-      {:ok, _} = success -> success
-      error -> {:recovery_required, %{phase: :activation_or_verification, reason: error}}
+    with :ok <- if(service_spec, do: stop(target, old_service), else: :ok),
+         :ok <-
+           Sandbox.replace_link(
+             target.sandbox,
+             Path.join(target.path, "current"),
+             "releases/" <> plan.id,
+             plan.id
+           ),
+         {:ok, service} <-
+           if(service_spec, do: start(target, relative, service_spec), else: {:ok, old_service}),
+         :ok <- save_service(target, service) do
+      {:ok, %{service: service}}
     end
+  end
+
+  defp transition_step(notify, phase, {:ok, evidence} = result) do
+    notify.(phase, evidence)
+    result
+  end
+
+  defp transition_step(notify, phase, error) do
+    notify.(phase, error)
+    {:recovery_required, %{phase: phase, reason: error}}
   end
 
   defp commands(target, relative, commands) do

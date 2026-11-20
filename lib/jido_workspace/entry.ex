@@ -1,5 +1,9 @@
 defmodule Jido.Workspace.Entry do
-  @moduledoc "A directory entry. Unknown mode or size is nil. Paths are absolute."
+  @moduledoc """
+  A directory entry. Unknown mode or size is nil.
+
+  Paths are relative on profiled workspaces and absolute on legacy workspaces.
+  """
   @enforce_keys [:path, :kind]
   defstruct [:path, :kind, :mode, :size]
 

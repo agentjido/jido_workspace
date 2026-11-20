@@ -6,6 +6,7 @@ It uses Elixir and OTP inside the `jido_workspace` package.
 The Local backend runs separate OS processes under the current user. It does
 not provide OS security isolation. Use trusted code with Local. The Docker
 backend runs commands in containers. gVisor uses Docker with the `runsc` runtime.
+Apple Container runs each command in a Linux VM on Apple silicon.
 
 Workspace policy applies to file changes and execution. See [Policy](README.md#policy).
 
@@ -83,9 +84,10 @@ refused. Environment entries go to the container, not to the Docker client.
 Do not mount the Docker socket or add arbitrary Docker flags through command data.
 
 Docker supports `kind: :exec`. BEAM services and calls return
-`{:error, {:unsupported_capability, :beam_call}}`. It has no checkpoints,
-tunnels, stdin, PTY, or separate output streams. Capabilities come from the
-controller even if a public handle is changed.
+`{:error, {:unsupported_capability, :beam_call}}`. Use a named Docker
+profile and `Jido.Workspace.run/3` with `stdin: :pipe` to send input during
+a command. Use `Jido.Workspace.connect/3` for approved loopback service ports.
+The controller reports the effective capabilities.
 
 `start_service` returns after container creation. Container start can still fail.
 `service_status` and `exec` return an error for an OCI start failure; its container
@@ -102,6 +104,20 @@ owns file access, policy, file views, output buffers, and status. The backend ow
 service creation, exit verification, cancellation, and resource cleanup. See
 [API_SPEC.md](API_SPEC.md#first-backend-increment-local-docker-and-gvisor).
 
+## Apple Container
+
+Select `provider: :apple_container` and a local `image` in a named Workspace
+profile. The backend requires a running Apple Container 1.x service, version
+1.7.1 or later, on Apple silicon with macOS 26 or later. The backend checks
+these requirements and the local ARM64 image before it creates the workspace
+directory. Each command has a separate VM and uses a disposable bind mount.
+
+The backend removes the exact container for each execution after exit, stop,
+or timeout. The backend checks the list of all containers before it confirms
+removal. If it cannot confirm cleanup, Workspace keeps writes and saves fenced.
+Retry close when the service is available. The example lists the capabilities
+that a profile can require. [Apple Container profile and tests](https://github.com/agentjido/jido_workspace/tree/main/examples/04_sandboxes_toolchains_and_services/04_07_run_on_apple_container)
+
 ## Ownership
 
 - `open/1` creates a new owned directory. An existing directory is refused.
@@ -110,9 +126,10 @@ service creation, exit verification, cancellation, and resource cleanup. See
 - `stop_service/2` stops one service.
 - `destroy/1` stops owned services and removes the owned directory.
 
-The application supervisor owns sandbox controllers. Services survive the exit
-of the caller that created them. They do not survive controller VM shutdown.
-Controller shutdown stops services; it leaves directories for inspection.
+The application supervisor owns sandbox controllers. A sandbox without an
+explicit owner survives the exit of its caller. A normal supervisor shutdown
+asks the backend to stop services and keeps directories for inspection.
+A crash can leave OS processes or containers for host recovery.
 
 An explicit stop returns `status: :stopped`. Late OS exit messages do not change
 that status or a timeout result. Stopping a service that has already exited,
@@ -126,10 +143,17 @@ File operations refuse parent traversal and symlink traversal. Local processes
 still have the current user's filesystem and network permissions. These path
 checks do not turn the local provider into a security sandbox.
 
-The Local POSIX provider uses `/bin/sh` and `/bin/kill`. External service stop and
-timeout use SIGKILL on the direct child. They do not guarantee cleanup of
-descendant processes. Services must remain in the foreground. Graceful stop,
-process groups, remote providers, leases, checkpoints, and tunnels are later work.
+The default Local runner uses a Port. Stop and timeout send SIGKILL to
+the direct child and wait for the port's exit status. A lost port can
+leave the process alive. Use trusted foreground tools with this runner.
+[Local Workspace profile](https://github.com/agentjido/jido_workspace/tree/main/examples/04_sandboxes_toolchains_and_services/04_01_run_a_disposable_local_sandbox)
+
+Use `runner: :erlexec` with the Local provider to start external tools
+in private process groups. Workspace checks that the group is gone
+before it reports an exit or a confirmed stop. Use trusted tools that
+keep all their writers in the group. If the backend cannot confirm
+cleanup, destroy returns a cleanup error and keeps the owned directory.
+[Process group profile](https://github.com/agentjido/jido_workspace/tree/main/examples/04_sandboxes_toolchains_and_services/04_03_supervise_a_native_process)
 
 ## Tests
 
@@ -142,12 +166,15 @@ mix format --check-formatted
 mix compile --warnings-as-errors
 ```
 
-Integration examples are in `test/examples/` and have the `:integration` tag.
-The alias runs each file in a separate BEAM instance. They check caller exit,
-detach and attach, BEAM calls, output limits, command failure, timeouts, and cleanup.
+The integration alias runs the numbered examples and tests in `test/examples/`
+in separate BEAM instances. These tests check caller exit, detach and attach,
+BEAM calls, output limits, command failure, timeouts, and cleanup.
 
-Live Docker tests use an installed Alpine image. The test run fails if the
-engine or image is unavailable. Without the flag, these tests are marked skipped.
+Live Docker tests use an installed Alpine image. The full set of numbered
+examples also uses a pinned Python image. Install both before you run all
+the examples. The test run fails if a required image or the engine is
+unavailable. Without the flag, these tests are marked skipped.
+[Install the Python fixture](https://github.com/agentjido/jido_workspace/blob/main/examples/04_sandboxes_toolchains_and_services/04_04_use_a_pinned_language_toolchain/README.md#install-the-image)
 
 ```sh
 # Optional preparation if this image is not installed:

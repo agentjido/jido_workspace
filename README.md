@@ -4,11 +4,54 @@ An Elixir package for agent working files, execution environments, deployment,
 and policy. One dependency supplies the Workspace, Shell, and VFS APIs.
 Source history remains in BeamWeaver.
 
-See [the API proposal](API_SPEC.md) for contracts, Action and Signal boundaries,
-and the migration plan. This package is unreleased. API changes apply directly
-in `Jido.Workspace`; there is no separate compatibility facade.
+See the [Workspace guides](docs/guides/table_of_contents.md) for the current
+API, runtime choices, and examples.
+
+## Open one working tree
+
+Set the named profiles in your host application's configuration. Choose a
+directory that the host can write and keep across BEAM restarts.
+
+```elixir
+import Config
+
+config :jido_workspace,
+  profiles: %{
+    build: %{
+      provider: :memory,
+      policy: [:read, :write, :execute, :save],
+      tools: ["cp"],
+      store: "reports"
+    },
+    review: %{provider: :memory, policy: [:read, :import], store: "reports"}
+  },
+  stores: %{"reports" => Path.expand("../workspace-snapshots", __DIR__)}
+```
+
+```elixir
+alias Jido.Workspace
+
+{:ok, workspace} = Workspace.open(profile: :build)
+:ok = Workspace.write(workspace, "reports/draft.txt", "hello\n")
+{:ok, %{exit_status: 0}} =
+  Workspace.run(workspace, ["cp", "draft.txt", "final.txt"], cwd: "reports")
+
+{:ok, saved} = Workspace.save(workspace)
+:ok = Workspace.close(workspace)
+
+{:ok, review} = Workspace.open(profile: :review, from: saved)
+{:ok, "hello\n"} = Workspace.read(review, "reports/final.txt")
+:ok = Workspace.close(review)
+```
+
+The named profile selects a file tree and runner. File calls and commands
+use the same tree. Keep the saved reference as JSON to reopen the files
+in a new BEAM with access to the same store.
 
 ## File API
+
+This example opens a workspace with the mount-based API. For a named profile,
+use the relative-path workflow above.
 
 ```elixir
 alias Jido.Workspace
@@ -44,9 +87,9 @@ Jido Signals. Its Actions and Signal adapter remain test-only. No model is used.
 
 | Module | Responsibility |
 | --- | --- |
-| `Jido.Workspace` | Working-file and Shell API |
+| `Jido.Workspace` | Working trees, commands, and saved snapshots |
 | Jido.Workspace.Lifetime (internal) | Ownership of mounted storage and Shell sessions |
-| `Jido.Workspace.Sandbox` | Local processes, Docker/gVisor containers, files, and retained services |
+| `Jido.Workspace.Sandbox` | Local processes, Docker/gVisor, Apple Container, files, and retained services |
 | `Jido.Workspace.Deploy` | Targets, preparation plans, execution records, and recovery |
 | `Jido.Workspace.Deploy.OTP` | OTP release handling and explicit state migration |
 | `Jido.Workspace.Deploy.Source` | Source projection, activation, and service restart |
@@ -57,11 +100,11 @@ Jido Signals. Its Actions and Signal adapter remain test-only. No model is used.
 One OTP application, `:jido_workspace`, starts the VFS registry, Shell
 supervision tree, and Workspace services. Sandbox and Deploy have separate
 registries and supervisors. The target-side OTP control module is in `src/`.
-See the [VFS guide](docs/vfs/README.md), [Shell guide](docs/shell/README.md),
+See the [VFS guide](docs/vfs/vfs.md), [Shell guide](docs/shell/shell.md),
 and [imported source revisions](docs/source-imports.md).
 
-An in-memory workspace and an OS environment are explicit, separate resources.
-Opening one does not open the other. Deploy takes an Sandbox handle.
+A named profile binds one tree to a runner. When you use the lower-level
+Sandbox API directly, it manages its own tree. Deploy uses a Sandbox target.
 A deployment `Snapshot` is a file payload with a digest and a caller-supplied
 source ID. It does not own branches, commits, merges, or source history.
 `Deploy.Snapshot.from_capture/2` converts a fixed VFS capture into that payload.
@@ -130,8 +173,10 @@ must use fixed content.
 
 ## Policy
 
-Set `policy:` when you open a workspace or an environment. The controller keeps
-this value for its lifetime. Handles and command options cannot change it.
+Set policy in the host profile for a named workspace. See
+`Jido.Workspace.Profile` for grants, tool controls, and provider requirements.
+For the mount-based Workspace and direct Sandbox APIs below, set `policy:`
+at open. The controller keeps it for its lifetime.
 
 | Profile | Read and capture | File changes | Raw VFS or Shell handle | OS execution and deployment |
 | --- | --- | --- | --- | --- |
@@ -155,7 +200,7 @@ required profile explicitly.
 :ok = Jido.Workspace.Sandbox.destroy(environment)
 ```
 
-Restricted profiles refuse all Shell execution. This prevents a command from
+Restricted presets in this example refuse all Shell execution. This prevents a command from
 bypassing file permissions. There is no command approval queue or policy editor
 in this spike. Resource close and environment destroy remain available for
 cleanup under every profile.
@@ -230,5 +275,4 @@ Configure GitHub VFS credentials and custom Shell guardrails under
 `:jido_workspace` with the keys `:github` and `:guardrail_rules`. The old
 application keys remain fallbacks through the import.
 
-The [asset lifecycle proposal](docs/workspace-asset-lifecycle.md) describes
-how a later Workspace API could save and reopen files across restarts.
+See [Open one working tree](#open-one-working-tree) for snapshot setup.

@@ -71,8 +71,7 @@ filesystem = Jido.VFS.Adapter.ETS.configure(name: :persistent_fs)
 filesystem = Jido.VFS.Adapter.S3.configure(
   bucket: "my-bucket",
   prefix: "uploads/",
-  access_key_id: "...",
-  secret_access_key: "..."
+  config: host_s3_config
 )
 ```
 

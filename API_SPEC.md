@@ -1,5 +1,8 @@
 # Workspace API proposal
 
+This document records an earlier design. See the
+[Workspace guides](docs/guides/table_of_contents.md) for the current API.
+
 Status: Workspace contracts and the first Sandbox backend increment are implemented.
 Remaining Sandbox, Policy, Deploy, and production Action/Signal contracts remain proposed.
 This package is unreleased. Update the existing API and its callers directly.
@@ -294,6 +297,11 @@ Errors for this increment retain Sandbox's existing `{:error, reason}` shape:
 | `{:docker, operation, status, output}` | Bounded Docker command failure |
 | `{:docker, operation, :output_limit, output}` | Control response exceeds the buffer; effects can be uncertain |
 | `{:docker, operation, :timeout, output}` | Command deadline expired; effects can be uncertain |
+
+For a named Docker, gVisor, or Apple Container profile, `Workspace.open/1`
+reports an unavailable local image as `%Workspace.Error{code: :image_unavailable}`.
+Apple Container also reports `:backend_unavailable` for an unsupported host,
+missing CLI, or unavailable service. [Apple Container profile](SANDBOX.md#apple-container)
 
 Do not treat nonzero command exit as an API error. It is an execution result.
 A timeout returns `status: :timed_out`, `exit_status: 124`, after cleanup succeeds.

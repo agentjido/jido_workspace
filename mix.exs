@@ -67,8 +67,10 @@ defmodule Jido.Workspace.MixProject do
       {:zoi, "~> 0.19.0"},
       {:splode, "~> 0.3.0"},
       {:jason, "~> 1.4"},
+      {:telemetry, "~> 1.0"},
       {:uniq, "~> 0.6"},
       {:bash, "~> 0.6.0", optional: true},
+      {:erlexec, "~> 2.6", optional: true, runtime: false},
       {:lua, "~> 1.0.0-rc.1"},
       {:ex_aws, "~> 2.7"},
       {:ex_aws_s3, "~> 2.2"},
@@ -80,7 +82,10 @@ defmodule Jido.Workspace.MixProject do
 
       # Agent boundary checks
       {:jido,
-       github: "agentjido/jido", ref: "047bf746330a2fbe7c3b25c045552e0303c97eaf", only: :test},
+       github: "agentjido/jido",
+       ref: "047bf746330a2fbe7c3b25c045552e0303c97eaf",
+       only: :test,
+       runtime: false},
 
       # Dev/Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -130,6 +135,7 @@ defmodule Jido.Workspace.MixProject do
         "DEPLOY.md",
         "docs/shell",
         "docs/vfs",
+        "docs/guides/table_of_contents.md",
         "docs/source-imports.md",
         "docs/workspace-asset-lifecycle.md",
         "mix.exs",
@@ -148,26 +154,77 @@ defmodule Jido.Workspace.MixProject do
   end
 
   defp docs do
-    [
-      main: "Jido.Workspace",
-      source_ref: "v#{@version}",
-      extras: [
-        "README.md",
-        "API_SPEC.md",
-        "SANDBOX.md",
-        "DEPLOY.md",
-        "CHANGELOG.md",
-        "CONTRIBUTING.md",
-        {"docs/shell/README.md", filename: "shell"},
-        "docs/shell/GUARDRAILS.md",
-        "docs/shell/MIGRATION.md",
-        {"docs/vfs/README.md", filename: "vfs"},
-        "docs/vfs/adapter-onboarding-checklist.md",
-        "docs/vfs/jido-agent-integration.md",
-        "docs/source-imports.md",
-        "docs/workspace-asset-lifecycle.md",
-        "LICENSE"
+    guide_groups = [
+      "Start here": [
+        {"docs/guides/table_of_contents.md", filename: "guides"},
+        {"README.md", title: "Open a workspace"}
+      ],
+      "Execution and delivery": [
+        {"SANDBOX.md", title: "Run in a sandbox"},
+        {"DEPLOY.md", title: "Deploy a saved result"}
+      ],
+      "Shell and VFS": [
+        {"docs/shell/shell.md", title: "Shell sessions"},
+        {"docs/vfs/vfs.md", title: "Virtual filesystems"},
+        {"docs/vfs/jido-agent-integration.md", title: "Use VFS in Jido agents"}
+      ],
+      Maintenance: [
+        {"CONTRIBUTING.md", title: "Contributing"},
+        {"docs/vfs/adapter-onboarding-checklist.md", title: "VFS adapter checklist"},
+        {"docs/shell/GUARDRAILS.md", title: "Shell guardrails"},
+        {"docs/shell/MIGRATION.md", title: "Shell migration"},
+        {"docs/source-imports.md", title: "Imported source"},
+        {"CHANGELOG.md", title: "Change log"},
+        {"LICENSE", title: "License"}
+      ],
+      "Earlier designs": [
+        {"API_SPEC.md", title: "Workspace API proposal"},
+        {"docs/workspace-asset-lifecycle.md", title: "Workspace asset lifecycle proposal"}
       ]
+    ]
+
+    [
+      main: "guides",
+      source_ref: "v#{@version}",
+      extra_section: "Guides",
+      groups_for_modules: [
+        Workspace: [
+          Jido.Workspace,
+          Jido.Workspace.Workspace,
+          Jido.Workspace.Entry,
+          Jido.Workspace.Error,
+          Jido.Workspace.Execution,
+          Jido.Workspace.FileView,
+          Jido.Workspace.Info
+        ],
+        "Durable references": [
+          Jido.Workspace.Snapshot,
+          Jido.Workspace.InfrastructureRef,
+          Jido.Workspace.CommandRef
+        ],
+        "Profiles and providers": [
+          Jido.Workspace.Profile,
+          Jido.Workspace.Policy,
+          Jido.Workspace.Provider,
+          Jido.Workspace.Schemas
+        ],
+        Sandboxes: ~r/^Jido\.Workspace\.Sandbox(\.|$)/,
+        Deployment: ~r/^Jido\.Workspace\.Deploy(\.|$)/,
+        Shell: ~r/^Jido\.Shell(\.|$)/,
+        VFS: ~r/^Jido\.VFS(\.|$)/
+      ],
+      nest_modules_by_prefix: [
+        Jido.Workspace.Sandbox,
+        Jido.Workspace.Deploy,
+        Jido.Shell.Backend,
+        Jido.Shell.Command,
+        Jido.VFS.Adapter
+      ],
+      extras: Enum.flat_map(guide_groups, &elem(&1, 1)),
+      groups_for_extras:
+        for {group, guides} <- guide_groups do
+          {group, Enum.map(guides, &elem(&1, 0))}
+        end
     ]
   end
 

@@ -6,13 +6,15 @@ defmodule Jido.Workspace.Sandbox.Backend do
   creation and cleanup. A successful stop must stop the owned execution resource.
   See API_SPEC.md for capability, error, and ownership contracts.
   """
-  alias Jido.Workspace.Sandbox.Backends.{Docker, Local}
+  alias Jido.Workspace.Sandbox.Backends.{AppleContainer, Docker, Local}
 
   @type state :: term()
   @type service :: map()
   @callback open(Jido.Workspace.Sandbox.t(), keyword()) ::
               {:ok, state(), map()} | {:error, term()}
-  @callback start_service(state(), map()) :: {:ok, service()} | {:error, term()}
+  # A failed launch can leave a resource which still needs cleanup.
+  @callback start_service(state(), map()) ::
+              {:ok, service()} | {:error, term()} | {:error, :quiescence_unknown, service()}
   @callback finish_service(state(), service(), integer()) :: {:ok, service()} | {:error, term()}
   @callback stop_service(state(), service()) :: :ok | {:error, term()}
   @callback destroy(state()) :: :ok | {:error, term()}
@@ -26,15 +28,22 @@ defmodule Jido.Workspace.Sandbox.Backend do
           else: {:error, :invalid_backend_options}
 
       {:error, provider} when provider in [:error, {:ok, :local}] ->
-        {:ok, Local, []}
+        {:ok, Local, Keyword.take(opts, [:runner])}
 
       {:error, {:ok, provider}} when provider in [:docker, :gvisor] ->
-        options = Keyword.take(opts, [:image])
+        options = Keyword.take(opts, [:image, :workspace_read_only])
         runtime = if provider == :gvisor, do: "runsc", else: "runc"
         {:ok, Docker, Keyword.put(options, :runtime, runtime)}
+
+      {:error, {:ok, :apple_container}} ->
+        {:ok, AppleContainer, Keyword.take(opts, [:image, :workspace_read_only])}
 
       _ ->
         {:error, :unsupported_provider}
     end
   end
+
+  @doc false
+  def prepare(AppleContainer, opts), do: AppleContainer.prepare(opts)
+  def prepare(_, opts), do: {:ok, opts}
 end

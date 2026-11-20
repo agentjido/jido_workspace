@@ -1,21 +1,17 @@
 # Jido Agent Integration
 
-`jido_vfs` is the storage abstraction layer in the Jido ecosystem. It is intentionally kept lower-level than consolidated `jido` so it can be used by libraries, services, shells, and agents without pulling in the full agent stack.
+`Jido.VFS` supplies storage adapters in `jido_workspace`. A host
+application can use these adapters from a library, Shell session, or Jido
+Action. This guide describes how to write the Action wrappers in the host.
 
 ## Recommendation
 
-Do not make `jido` a required dependency of `jido_vfs`.
-
-Reasons:
-
-- `jido_vfs` is useful outside agent runtimes.
-- Adding consolidated `jido` to the VFS package would widen the dependency surface significantly.
-- Filesystem adapters and tool/action wrappers evolve at different rates.
-- Agent-safe defaults are policy decisions, not storage-abstraction concerns.
+Keep Jido and its Action definitions in the host application. The host
+decides which adapters, users, and operations to expose.
 
 ## Better pattern
 
-Keep `jido_vfs` as the adapter/core package and expose agent tools in one of these forms:
+Use `Jido.VFS` for files and expose agent tools in one of these forms:
 
 - Thin action modules in the consuming app.
 - A separate `jido_vfs_actions` package.
@@ -95,8 +91,7 @@ defmodule MyApp.Actions.ReadFile do
 end
 ```
 
-## Conclusion
+## Keep tool ownership in the host
 
-`jido_vfs` should support Jido agents well, but through composition rather than a hard dependency on `jido`.
-
-If the ecosystem wants a default tool pack, it should likely live next to this package, not inside its runtime core.
+Test the wrappers with the same permissions and filesystem configuration
+that the host provides to the agent.

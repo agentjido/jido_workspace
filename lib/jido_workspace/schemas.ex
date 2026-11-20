@@ -100,6 +100,18 @@ defmodule Jido.Workspace.Schemas do
 
   def relative_path?(_), do: false
 
+  @command_limits %{timeout_ms: 60_000, output_limit: 1_048_576}
+
+  @doc false
+  def command_limits, do: @command_limits
+
+  @doc false
+  def run_timeout_schema, do: Zoi.integer() |> Zoi.min(1) |> Zoi.max(@command_limits.timeout_ms)
+
+  @doc false
+  def run_output_limit_schema,
+    do: Zoi.integer() |> Zoi.min(0) |> Zoi.max(@command_limits.output_limit)
+
   @doc false
   def durable_id_schema do
     Zoi.string()

@@ -16,6 +16,7 @@ defmodule Jido.Workspace.Deploy.OTP do
     path = Keyword.get(opts, :path, name)
 
     with :ok <- Sandbox.authorize(sandbox, :deploy),
+         :ok <- require_beam(sandbox),
          true <- Artifact.valid?(artifact),
          {:ok, location} <- Sandbox.location(sandbox, path),
          :ok <- Snapshot.project(artifact.snapshot, sandbox, location.path),
@@ -25,6 +26,14 @@ defmodule Jido.Workspace.Deploy.OTP do
     else
       false -> {:error, :digest_mismatch}
       error -> error
+    end
+  end
+
+  defp require_beam(sandbox) do
+    case Sandbox.capabilities(sandbox) do
+      %{beam_call: true} -> :ok
+      %{} -> {:error, {:unsupported_capability, :beam_call}}
+      {:error, _} = error -> error
     end
   end
 
@@ -98,7 +107,9 @@ defmodule Jido.Workspace.Deploy.OTP do
     with true <- Snapshot.valid?(artifact.snapshot),
          :ok <- Sandbox.mkdir(target.sandbox, "staging"),
          :ok <- Snapshot.project(artifact.snapshot, target.sandbox, "staging/" <> id),
+         :ok <- Snapshot.ensure_directories(artifact.snapshot, target.sandbox, target.path),
          :ok <- merge_files(target, artifact.snapshot),
+         :ok <- Snapshot.verify_tracked(artifact.snapshot, target.sandbox, target.path),
          {:ok, files} <- Sandbox.release_files(target.sandbox, target.path, artifact.version),
          :ok <- register_release(target, artifact.version, files.rel, files.apps) do
       :ok

@@ -9,6 +9,7 @@ defmodule Jido.Workspace.ActionSignalBoundaryTest do
   alias Jido.Workspace.TestSupport.{ActionBoundary, Actions, BoundaryAgent}
 
   setup do
+    assert {:ok, _} = Application.ensure_all_started(:jido)
     start_supervised!({Jido, name: __MODULE__.Runtime})
     store = start_supervised!({Agent, fn -> %{} end})
     {:ok, ws} = Workspace.open()

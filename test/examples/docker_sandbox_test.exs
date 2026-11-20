@@ -238,6 +238,7 @@ defmodule Jido.Workspace.Sandbox.DockerTest do
   end
 
   defp exercise_boundaries(sandbox) do
+    assert {:ok, _} = Application.ensure_all_started(:jido)
     start_supervised!({Jido, name: __MODULE__.Runtime})
     store = start_supervised!({Agent, fn -> %{} end})
     access = %{store: store, reply_to: self(), resources: %{"container" => {:sandbox, sandbox}}}

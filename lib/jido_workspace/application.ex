@@ -18,6 +18,8 @@ defmodule Jido.Workspace.Application do
         },
         {Registry, keys: :unique, name: Jido.Workspace.Sandbox.Registry},
         {DynamicSupervisor, strategy: :one_for_one, name: Jido.Workspace.Sandbox.Supervisor},
+        {DynamicSupervisor,
+         strategy: :one_for_one, name: Jido.Workspace.ProviderLease.Supervisor},
         {Task.Supervisor, name: Jido.Workspace.ProfileSession.Tasks},
         {DynamicSupervisor,
          strategy: :one_for_one, name: Jido.Workspace.ProfileSession.Supervisor},

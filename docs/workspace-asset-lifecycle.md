@@ -1,7 +1,8 @@
 # Workspace asset lifecycle proposal
 
-Status is proposed for owner review. The combined package supplies the live
-workspace, capture, execution, and deployment primitives that this design uses.
+This document records an earlier proposal. The current workflow uses
+`Jido.Workspace.save/1` and `Jido.Workspace.open/1` with a saved reference.
+See [Open one working tree](../README.md#open-one-working-tree).
 
 ## Ownership and identity
 

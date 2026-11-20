@@ -1,7 +1,7 @@
 defmodule Jido.Workspace.Deploy.Server do
   @moduledoc false
   use GenServer, restart: :temporary
-  alias Jido.Workspace.Deploy.{Plan, Snapshot}
+  alias Jido.Workspace.Deploy.{Plan, Recipe, Snapshot}
 
   def start_link({key, target}),
     do:
@@ -18,7 +18,7 @@ defmodule Jido.Workspace.Deploy.Server do
          plans: %{},
          operations: %{},
          task: nil,
-         blocked: false,
+         blocked_by: nil,
          sandbox_monitor: Process.monitor(target.sandbox.pid)
        }}
     else
@@ -29,7 +29,8 @@ defmodule Jido.Workspace.Deploy.Server do
   def handle_call(:inspect, _, state) do
     result =
       with {:ok, observation} <- executor(state.target).inspect(state.target) do
-        {:ok, Map.put(observation, :controller, %{blocked: state.blocked})}
+        controller = %{blocked: state.blocked_by != nil, blocked_by: state.blocked_by}
+        {:ok, Map.put(observation, :controller, controller)}
       end
 
     {:reply, result, state}
@@ -39,6 +40,11 @@ defmodule Jido.Workspace.Deploy.Server do
 
   def handle_call({:prepare, artifact, opts}, _, state), do: prepare(state, artifact, opts, nil)
 
+  def handle_call({:recover, id, _, _}, _, %{blocked_by: blocked_by} = state)
+      when not is_nil(blocked_by) and id != blocked_by do
+    {:reply, {:error, :recovery_required}, state}
+  end
+
   def handle_call({:recover, id, artifact, opts}, _, state) do
     case state.operations[id] do
       %{status: status} when status != :running -> prepare(state, artifact, opts, id)
@@ -46,29 +52,29 @@ defmodule Jido.Workspace.Deploy.Server do
     end
   end
 
-  def handle_call({:apply, plan}, _, state) do
+  def handle_call({:apply, %Plan{id: id} = plan}, _, state) do
     permission = Jido.Workspace.Sandbox.authorize(state.target.sandbox, :deploy)
 
     cond do
       permission != :ok ->
         {:reply, permission, state}
 
-      state.plans[plan.id] != plan ->
+      state.plans[id] != plan ->
         {:reply, {:error, :unknown_or_changed_plan}, state}
 
-      state.operations[plan.id] ->
-        {:reply, {:ok, plan.id}, state}
+      state.operations[id] ->
+        {:reply, {:ok, id}, state}
 
       state.task != nil ->
         {:reply, {:error, :busy}, state}
 
-      state.blocked and plan.recovery_of == nil ->
+      state.blocked_by != nil and plan.recovery_of != state.blocked_by ->
         {:reply, {:error, :recovery_required}, state}
 
       true ->
         target = %{state.target | sandbox: state.execution_sandbox}
         owner = self()
-        notify = fn phase, evidence -> send(owner, {:step, plan.id, phase, evidence}) end
+        notify = fn phase, evidence -> send(owner, {:step, id, phase, evidence}) end
 
         task =
           Task.Supervisor.async_nolink(Jido.Workspace.Deploy.Tasks, fn ->
@@ -77,8 +83,8 @@ defmodule Jido.Workspace.Deploy.Server do
           end)
 
         record = %{
-          id: plan.id,
-          plan_id: plan.id,
+          id: id,
+          plan_id: id,
           recovery_of: plan.recovery_of,
           target: %{id: target.id, name: target.name, stage: target.stage, roles: target.roles},
           snapshot_id: plan.artifact.snapshot.id,
@@ -90,10 +96,12 @@ defmodule Jido.Workspace.Deploy.Server do
           steps: []
         }
 
-        {:reply, {:ok, plan.id},
-         %{state | task: {task, plan.id}, operations: Map.put(state.operations, plan.id, record)}}
+        {:reply, {:ok, id},
+         %{state | task: {task, id}, operations: Map.put(state.operations, id, record)}}
     end
   end
+
+  def handle_call({:apply, _}, _, state), do: {:reply, {:error, :unknown_or_changed_plan}, state}
 
   def handle_call({:status, id}, _, state) do
     result =
@@ -127,11 +135,18 @@ defmodule Jido.Workspace.Deploy.Server do
         finished_at: DateTime.utc_now()
       })
 
+    blocked_by =
+      case status do
+        :recovery_required -> id
+        :succeeded -> nil
+        :failed -> state.blocked_by
+      end
+
     {:noreply,
      %{
        state
        | task: nil,
-         blocked: status == :recovery_required or (state.blocked and status != :succeeded),
+         blocked_by: blocked_by,
          operations: Map.put(state.operations, id, record)
      }}
   end
@@ -150,7 +165,7 @@ defmodule Jido.Workspace.Deploy.Server do
       })
 
     {:noreply,
-     %{state | task: nil, blocked: true, operations: Map.put(state.operations, id, record)}}
+     %{state | task: nil, blocked_by: id, operations: Map.put(state.operations, id, record)}}
   end
 
   def handle_info({:DOWN, ref, :process, _, _}, %{sandbox_monitor: ref} = state),
@@ -161,7 +176,9 @@ defmodule Jido.Workspace.Deploy.Server do
   defp prepare(state, artifact, opts, recovery_of) do
     with true <- artifact.kind == state.target.kind,
          true <- Jido.Workspace.Deploy.Artifact.valid?(artifact),
+         true <- Keyword.keyword?(opts),
          true <- valid_options?(state.target.kind, opts),
+         :ok <- recovery_verification(state, recovery_of, Keyword.get(opts, :recipe)),
          {:ok, observation} <- executor(state.target).inspect(state.target) do
       id = Base.encode16(:crypto.strong_rand_bytes(12), case: :lower)
 
@@ -183,6 +200,16 @@ defmodule Jido.Workspace.Deploy.Server do
     end
   end
 
+  defp recovery_verification(%{target: %{kind: :source}, blocked_by: id}, id, recipe)
+       when not is_nil(id) do
+    case recipe do
+      %Recipe{verify: verify} when not is_nil(verify) -> :ok
+      _ -> {:error, :recovery_verification_required}
+    end
+  end
+
+  defp recovery_verification(_state, _id, _recipe), do: :ok
+
   defp execute(target, plan, notify) do
     with true <- Snapshot.valid?(plan.artifact.snapshot),
          {:ok, observation} <- executor(target).inspect(target),
@@ -198,7 +225,7 @@ defmodule Jido.Workspace.Deploy.Server do
   defp valid_options?(:source, opts),
     do:
       Keyword.keys(opts) -- [:recipe] == [] and
-        Jido.Workspace.Deploy.Recipe.valid?(Keyword.get(opts, :recipe))
+        Recipe.valid?(Keyword.get(opts, :recipe))
 
   defp valid_options?(:otp, opts) do
     Keyword.keys(opts) -- [:preflight, :verify] == [] and

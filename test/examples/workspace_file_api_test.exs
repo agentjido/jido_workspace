@@ -8,6 +8,7 @@ defmodule Jido.Workspace.FileApiIntegrationTest do
   alias Jido.Workspace.TestSupport.{Actions, BoundaryAgent}
 
   setup do
+    assert {:ok, _} = Application.ensure_all_started(:jido)
     start_supervised!({Jido, name: __MODULE__.Runtime})
     {:ok, ws} = Workspace.open(policy: :workspace_write)
     {:ok, restricted} = Workspace.open(policy: :read_only)

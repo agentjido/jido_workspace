@@ -52,7 +52,7 @@ defmodule Jido.Workspace.Deploy do
     end
   end
 
-  @doc "Reads the current target identity and runtime state."
+  @doc "Reads the target identity, runtime state, and any operation blocking deployment."
   def inspect(session), do: GenServer.call(session, :inspect)
 
   @doc "Creates a plan bound to the current target observation. It does not apply the plan."
@@ -64,7 +64,12 @@ defmodule Jido.Workspace.Deploy do
   @doc "Reads the recorded status and evidence for an operation."
   def status(session, id), do: GenServer.call(session, {:status, id})
 
-  @doc "Prepares a new explicit transition after a failed or successful deployment."
+  @doc """
+  Prepares a new explicit transition after a finished deployment.
+
+  A blocked target accepts only the ID in `controller.blocked_by`, from
+  `inspect/1`. A blocked source target requires a recipe with a verify command.
+  """
   def recover(session, operation_id, %Artifact{} = artifact, opts \\ []) do
     GenServer.call(session, {:recover, operation_id, artifact, opts}, 15_000)
   end

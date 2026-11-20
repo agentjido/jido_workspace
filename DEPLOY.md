@@ -5,14 +5,14 @@ payloads, ordered preparation, activation, verification, and explicit recovery.
 It supports OTP releases first and Node.js source deployment second.
 
 Deploy uses `Jido.Workspace.Sandbox` inside the `jido_workspace` package.
-Workspace policy controls deployment. There is no dependency on BeamWeaver or an
-agent framework. VFS and Shell remain separate package dependencies.
+Workspace policy controls deployment. The same package supplies the file and
+command APIs. Use Deploy directly in a BEAM application.
 
 ## Boundaries
 
 | Object | Purpose |
 | --- | --- |
-| `Snapshot` | Relative paths, file bytes, normalized modes, source ID, content digest |
+| `Snapshot` | Relative paths, file bytes, normalized modes, directory paths from saved Workspace trees, source ID, content digest |
 | `Artifact` | Versioned source payload or OTP release payload |
 | `Target` | Name, stage, roles, sandbox, destination path, and optional BEAM service |
 | `Recipe` | Source preparation commands, service specification, verification command |
@@ -66,8 +66,13 @@ record.status
 # :succeeded, :failed, or :recovery_required
 ```
 
-The executor stages and verifies files, refuses conflicting existing bytes, and
-registers the release with `release_handler.set_unpacked`. A small Erlang target
+The sandbox must report `beam_call: true`. OTP startup checks this before it
+copies files. A Docker workspace can supply the saved release tree to a local
+target.
+
+The executor stages the payload, refuses conflicting existing bytes, and checks
+the merged payload's bytes and executable modes before it registers the release
+with `release_handler.set_unpacked`. A small Erlang target
 component runs `check_install_release` and `install_release`. It does not require
 Elixir on the target. It has a runtime generation token and a single transition
 lock. Target operations have stable IDs within that runtime generation.
@@ -81,9 +86,31 @@ State migration belongs in explicit OTP `code_change/3` callbacks and `.appup`
 instructions. Traffic can continue after planning. OTP supplies the state that
 exists when it performs the transition. The counter test proves that requests
 after planning are preserved. It tests both upgrade and downgrade migration.
+See [Upgrade an OTP release](https://github.com/agentjido/jido_workspace/tree/main/examples/08_deployment_and_application_workflows/08_04_upgrade_an_otp_release).
 
 The SDK does not make a release permanent. Normal restart boots the initial
 permanent release. Persistent boot selection and ERTS replacement are later work.
+
+## Saved Workspace trees
+
+Pass the reference from `Jido.Workspace.save/1` to `Snapshot.from_saved/2`.
+The receiving BEAM needs a profile with `:read` and `:import` grants and access
+to the store named in the reference. This conversion reads and verifies the
+saved bundle directly. The source workspace can already be closed.
+
+```elixir
+alias Jido.Workspace.Deploy.{Artifact, Snapshot}
+
+{:ok, snapshot} = Snapshot.from_saved(saved_reference, profile: :reports_reader)
+{:ok, artifact} = Artifact.new(:source, "report-1", snapshot)
+```
+
+Deploy records the saved reference as `snapshot_id` and a separate payload
+digest. The payload contains file bytes, regular and executable modes, and
+directory paths, including empty directories. Deploy checks the saved entries
+again after preparation, before it switches the active source link. See
+[Deploy a saved tree](https://github.com/agentjido/jido_workspace/tree/main/examples/08_deployment_and_application_workflows/08_02_deploy_a_saved_tree)
+for the complete setup and checks.
 
 ## VFS memory captures
 
@@ -140,16 +167,25 @@ observations. Status stays available while the operation runs.
 
 An uncertain installation result, failed verification, or a failed migration
 after loading requires recovery. Further ordinary deployments are blocked.
-Recovery is a new plan, linked to an earlier operation:
+Use `Deploy.inspect/1` to find the operation ID in `controller.blocked_by`.
+Recovery uses that ID and a caller-selected artifact. For a source target, the
+recovery recipe must include a verify command.
 
 ```elixir
-{:ok, recovery} = Deploy.recover(session, operation_id, initial)
+{:ok, %{controller: %{blocked_by: failed_id}}} = Deploy.inspect(session)
+{:ok, recovery} = Deploy.recover(session, failed_id, initial, recipe: recipe)
 {:ok, recovery_id} = Deploy.apply(session, recovery)
 {:ok, recovery_record} = Deploy.await(session, recovery_id)
 ```
 
-A downgrade requires a valid downgrade path and state migration. It does not
-reverse external effects. Failed recovery leaves the controller blocked.
+A failure before recovery changes the target keeps the original blocker. If
+recovery leaves the target in an uncertain state, the recovery operation becomes
+the blocker. Successful recovery clears the blocker and retains the previous
+operation records. See [Verify and recover a deployment](https://github.com/agentjido/jido_workspace/tree/main/examples/08_deployment_and_application_workflows/08_03_verify_and_recover_a_deployment).
+
+OTP recovery uses the release transition and its runtime checks. A downgrade
+requires a valid downgrade path and state migration. The host owns recovery of
+external effects.
 
 OTP can restart the node after an installation error. This loses PIDs and
 unsaved process state. Call `OTP.reconnect(target)` after the release applications
@@ -210,14 +246,14 @@ not claim that a running application uses the new files.
 
 ## Scope
 
-The implementation is local and POSIX-only. It does not provide OS security
-isolation. Use trusted payloads, boot scripts, commands, and upgrade instructions.
+Deploy runs on a POSIX host. Execution uses the target sandbox. A local target
+shares the host OS. Use trusted payloads, boot scripts, commands, and upgrade instructions.
 The SDK does not require an external version-control system.
 
 Snapshot identity is distinct from content digest. A caller can retain its own
-BeamWeaver source ID. `Snapshot.from_capture/2` converts VFS memory captures
-through the existing VFS dependency. Snapshots support regular and executable files. Symlinks
-and special files are refused; empty directories are not retained.
+BeamWeaver source ID when converting a VFS memory capture. Snapshots support
+regular and executable files. Deploy refuses symlinks and special files. Saved
+Workspace trees also retain empty directories.
 
 Plans and operation records stay in controller memory. Target operation records
 stay in target memory. Controller or node loss requires inspection; exactly-once
@@ -225,7 +261,7 @@ execution across crashes is not provided. Destroying a sandbox also ends its
 deployment controller. Closing a sandbox handle leaves its services running.
 
 Stages and roles are labels in this spike. Multi-host execution, remote attachment,
-SSH/SFTP, FTP, containers, provider plugins, durable journals, automatic pruning,
+SSH/SFTP, FTP, container orchestration, provider plugins, durable journals, automatic pruning,
 general task hooks, and BeamWeaver integration are later work.
 
 ## Tests

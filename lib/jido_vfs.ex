@@ -1,5 +1,5 @@
 defmodule Jido.VFS do
-  @external_resource Path.expand("../docs/vfs/README.md", __DIR__)
+  @external_resource Path.expand("../docs/vfs/vfs.md", __DIR__)
   @moduledoc @external_resource
              |> File.read!()
              |> String.split("<!-- MDOC !-->")

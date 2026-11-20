@@ -2,6 +2,7 @@ defmodule Jido.Workspace.Lifetime do
   @moduledoc false
   use GenServer
   alias Jido.Shell.{ShellSession, VFS}
+  alias Jido.VFS.Adapter.InMemory
   alias Jido.Workspace.FileView
 
   def start(id, opts), do: GenServer.start(__MODULE__, {id, opts})
@@ -113,6 +114,17 @@ defmodule Jido.Workspace.Lifetime do
   def handle_call({:file, operation, args}, _, state) do
     action = if operation in [:read_file, :list_dir], do: :read, else: :write
     result = with :ok <- authorize(state, action), do: apply(VFS, operation, [state.id | args])
+    {:reply, result, state}
+  end
+
+  def handle_call({:working_file, operation, args}, _, %{fs: {InMemory, config}} = state) do
+    action = if operation in [:read, :list], do: :read, else: :write
+
+    result =
+      with :ok <- authorize(state, action),
+           :ok <- single_mount(state),
+           do: InMemory.working_file(config, operation, args)
+
     {:reply, result, state}
   end
 
